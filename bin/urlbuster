@@ -5,6 +5,7 @@ from __future__ import print_function
 
 import os
 import sys
+import re
 import argparse
 import requests
 
@@ -25,25 +26,8 @@ SUPPORTED_SLASHS = {
 DEFAULT_METHOD = "GET"
 SUPPORTED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 DEFAULT_CODES = [
-    "200",
-    "201",
-    "202",
-    "203",
-    "204",
-    "205",
-    "206",
-    "207",
-    "208",
-    "226",
-    "300",
-    "301",
-    "302",
-    "303",
-    "304",
-    "305",
-    "306",
-    "307",
-    "308",
+    "2..",
+    "3..",
     "403",
     "407",
     "411",
@@ -97,6 +81,198 @@ def read_file(filepath):
         content = f.readlines()
     # Remove whitespace characters like '\n' at the end of each line
     return [x.strip() for x in content]
+
+
+# -------------------------------------------------------------------------------------------------
+# ARGS
+# -------------------------------------------------------------------------------------------------
+
+
+def _args_check_codes(value):
+    """Check argument for valid status codes."""
+    strval = value
+    for code in strval.split(","):
+        code = code.replace('.', '1')
+        try:
+            code = int(code)
+        except ValueError:
+            raise argparse.ArgumentTypeError('Invalid status code "%s"')
+        if code < 100 or code >= 600:
+            raise argparse.ArgumentTypeError('Invalid status code "%s"')
+    return strval
+
+
+def _args_check_method(value):
+    """Check argument for valid methods."""
+    strval = value
+    for method in strval.split(","):
+        if method not in SUPPORTED_METHODS:
+            raise argparse.ArgumentTypeError(
+                'Invalid method "%s". Supported: %s' % (value, ", ".join(SUPPORTED_METHODS))
+            )
+    return strval
+
+
+def _args_check_slash(value):
+    """Check argument for valid slash value."""
+    strval = value
+    if strval not in SUPPORTED_SLASHS.keys():
+        raise argparse.ArgumentTypeError(
+            'Invalid slash value "%s". Supported: %s' % (value, ", ".join(SUPPORTED_SLASHS.keys()))
+        )
+    return strval
+
+
+def _args_check_file(value):
+    """Check argument for existing file."""
+    strval = value
+    if not os.path.isfile(strval):
+        raise argparse.ArgumentTypeError('File "%s" not found.' % value)
+    return strval
+
+
+def get_args():
+    """Retrieve command line arguments."""
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawTextHelpFormatter,
+        add_help=False,
+        usage="""%(prog)s [options] -w <path> URL
+       %(prog)s --help
+       %(prog)s --version
+""",
+        description="""URL bruteforcer to locate existing and/or hidden files or directories.
+
+Similar to dirb or gobuster, but also allows to iterate over multiple HTTP request methods,
+multiple useragents and multiple host header values.
+""",
+        epilog="""examples
+
+  %(prog)s -w /path/to/words http://example.com
+  %(prog)s -w /path/to/words http://example.com:8000
+  %(prog)s -k -w /path/to/words https://example.com:10000""",
+    )
+    required = parser.add_argument_group("required arguments")
+    optional = parser.add_argument_group("optional arguments")
+    required.add_argument(
+        "-w",
+        "--wordlist",
+        metavar="f",
+        required=True,
+        type=_args_check_file,
+        help="Path to wordlist to use.",
+    )
+    optional.add_argument(
+        "-c",
+        "--code",
+        metavar="str",
+        required=False,
+        default=",".join(DEFAULT_CODES),
+        type=_args_check_codes,
+        help="Comma separated list of HTTP status code to treat as success.\n"
+        + "You can use a '.' (dot) as a wildcard.\n"
+        + "\nDefault: "
+        + ", ".join(DEFAULT_CODES),
+    )
+    optional.add_argument(
+        "-m",
+        "--method",
+        metavar="str",
+        required=False,
+        default=DEFAULT_METHOD,
+        type=_args_check_method,
+        help="Comma separated list of HTTP methods to test against each request.\n"
+        + "Note, each supplied method will double the number of requests.\n"
+        + "Supported methods: "
+        + ", ".join(SUPPORTED_METHODS)
+        + "\n"
+        + "Default: "
+        + DEFAULT_METHOD,
+    )
+    optional.add_argument(
+        "-s",
+        "--slash",
+        metavar="str",
+        required=False,
+        default="no",
+        type=_args_check_slash,
+        help="Append or omit a trailing slash to URLs to test.\n"
+        + "Options: "
+        + ", ".join(SUPPORTED_SLASHS.keys())
+        + "\n"
+        + "Note, using 'both' will double the number of requests.\n"
+        + "Default: "
+        + DEFAULT_SLASH,
+    )
+    agent = optional.add_mutually_exclusive_group(required=False)
+    agent.add_argument(
+        "-a", "--agent", metavar="str", required=False, type=str, help="Useragent string to send."
+    )
+    agent.add_argument(
+        "-A",
+        "--agent-file",
+        metavar="f",
+        required=False,
+        type=_args_check_file,
+        help="Path to a newline separated file of useragents to use.\n"
+        + "Note, each supplied useragent will double the number of requests.",
+    )
+    host = optional.add_mutually_exclusive_group(required=False)
+    host.add_argument(
+        "-h", "--host", metavar="str", required=False, type=str, help="Host header value to send."
+    )
+    host.add_argument(
+        "-H",
+        "--host-file",
+        metavar="f",
+        required=False,
+        type=_args_check_file,
+        help="Path to a newline separated file of host header values to send.\n"
+        + "Note, each supplied host header value will double the number of requests.",
+    )
+    optional.add_argument(
+        "-k",
+        "--insecure",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Do not verify TLS certificates.",
+    ),
+    optional.add_argument(
+        "-p",
+        "--proxy",
+        metavar="str",
+        required=False,
+        type=str,
+        help="Use a proxy for all requests.\n"
+        + "Format: http://<host>:<port> or http://<user>:<pass>@<host>:<port>",
+    ),
+    optional.add_argument(
+        "-t",
+        "--timeout",
+        metavar="s",
+        required=False,
+        default=DEFAULT_TIMEOUT,
+        type=int,
+        help="Connection timeout in seconds.\nDefault: " + str(DEFAULT_TIMEOUT),
+    ),
+    optional.add_argument(
+        "-r",
+        "--retries",
+        metavar="x",
+        required=False,
+        default=DEFAULT_RETRIES,
+        type=int,
+        help="Connection retries.\nDefault: " + str(DEFAULT_RETRIES),
+    ),
+    optional.add_argument("--help", action="help", help="Show this help message and exit")
+    optional.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s " + VERSION + " by cytopia",
+        help="Show version information",
+    )
+    parser.add_argument("URL", type=str, help="The base URL to scan.")
+    return parser.parse_args()
 
 
 # -------------------------------------------------------------------------------------------------
@@ -221,194 +397,13 @@ def request(url, method, host, useragent, timeout, insecure, proxy):
         return False, {"type": "exception", "err": err}
 
 
-# -------------------------------------------------------------------------------------------------
-# ARGS
-# -------------------------------------------------------------------------------------------------
+def check_code(code, codes):
+    """Check if http status code is a successful code."""
+    for reg in codes:
+        if re.match(reg, code):
+            return True
 
-
-def _args_check_codes(value):
-    """Check argument for valid status codes."""
-    strval = value
-    for code in strval.split(","):
-        try:
-            code = int(code)
-        except ValueError:
-            raise argparse.ArgumentTypeError('Invalid status code "%s"')
-        if code < 100 or code >= 600:
-            raise argparse.ArgumentTypeError('Invalid status code "%s"')
-    return strval
-
-
-def _args_check_method(value):
-    """Check argument for valid methods."""
-    strval = value
-    for method in strval.split(","):
-        if method not in SUPPORTED_METHODS:
-            raise argparse.ArgumentTypeError(
-                'Invalid method "%s". Supported: %s' % (value, ", ".join(SUPPORTED_METHODS))
-            )
-    return strval
-
-
-def _args_check_slash(value):
-    """Check argument for valid slash value."""
-    strval = value
-    if strval not in SUPPORTED_SLASHS.keys():
-        raise argparse.ArgumentTypeError(
-            'Invalid slash value "%s". Supported: %s' % (value, ", ".join(SUPPORTED_SLASHS.keys()))
-        )
-    return strval
-
-
-def _args_check_file(value):
-    """Check argument for existing file."""
-    strval = value
-    if not os.path.isfile(strval):
-        raise argparse.ArgumentTypeError('File "%s" not found.' % value)
-    return strval
-
-
-def get_args():
-    """Retrieve command line arguments."""
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawTextHelpFormatter,
-        add_help=False,
-        usage="""%(prog)s [options] -w <path> URL
-       %(prog)s --help
-       %(prog)s --version
-""",
-        description="""URL bruteforcer to locate existing and/or hidden files or directories.
-
-Similar to dirb or gobuster, but also allows to iterate over multiple HTTP request methods,
-multiple useragents and multiple host header values.
-""",
-        epilog="""examples
-
-  %(prog)s -w /path/to/words http://example.com
-  %(prog)s -w /path/to/words http://example.com:8000
-  %(prog)s -k -w /path/to/words https://example.com:10000""",
-    )
-    required = parser.add_argument_group("required arguments")
-    optional = parser.add_argument_group("optional arguments")
-    required.add_argument(
-        "-w",
-        "--wordlist",
-        metavar="f",
-        required=True,
-        type=_args_check_file,
-        help="Path to wordlist to use.",
-    )
-    optional.add_argument(
-        "-c",
-        "--code",
-        metavar="str",
-        required=False,
-        default=",".join(DEFAULT_CODES),
-        type=_args_check_codes,
-        help="Comma separated list of HTTP status code to treat as success."
-        + "\nDefault: "
-        + ", ".join(DEFAULT_CODES),
-    )
-    optional.add_argument(
-        "-m",
-        "--method",
-        metavar="str",
-        required=False,
-        default=DEFAULT_METHOD,
-        type=_args_check_method,
-        help="Comma separated list of HTTP methods to test against each request.\n"
-        + "Note, each supplied method will double the number of requests.\n"
-        + "Supported methods: "
-        + ", ".join(SUPPORTED_METHODS)
-        + "\n"
-        + "Default: "
-        + DEFAULT_METHOD,
-    )
-    optional.add_argument(
-        "-s",
-        "--slash",
-        metavar="str",
-        required=False,
-        default="no",
-        type=_args_check_slash,
-        help="Append or omit a trailing slash to URLs to test.\n"
-        + "Options: "
-        + ", ".join(SUPPORTED_SLASHS.keys())
-        + "\n"
-        + "Note, using 'both' will double the number of requests.\n"
-        + "Default: "
-        + DEFAULT_SLASH,
-    )
-    agent = optional.add_mutually_exclusive_group(required=False)
-    agent.add_argument(
-        "-a", "--agent", metavar="str", required=False, type=str, help="Useragent string to send."
-    )
-    agent.add_argument(
-        "-A",
-        "--agent-file",
-        metavar="f",
-        required=False,
-        type=_args_check_file,
-        help="Path to a newline separated file of useragents to use.\n"
-        + "Note, each supplied useragent will double the number of requests.",
-    )
-    host = optional.add_mutually_exclusive_group(required=False)
-    host.add_argument(
-        "-h", "--host", metavar="str", required=False, type=str, help="Host header value to send."
-    )
-    host.add_argument(
-        "-H",
-        "--host-file",
-        metavar="f",
-        required=False,
-        type=_args_check_file,
-        help="Path to a newline separated file of host header values to send.\n"
-        + "Note, each supplied host header value will double the number of requests.",
-    )
-    optional.add_argument(
-        "-k",
-        "--insecure",
-        required=False,
-        default=False,
-        action="store_true",
-        help="Do not verify TLS certificates.",
-    ),
-    optional.add_argument(
-        "-p",
-        "--proxy",
-        metavar="str",
-        required=False,
-        type=str,
-        help="Use a proxy for all requests.\n"
-        + "Format: http://<host>:<port> or http://<user>:<pass>@<host>:<port>",
-    ),
-    optional.add_argument(
-        "-t",
-        "--timeout",
-        metavar="s",
-        required=False,
-        default=DEFAULT_TIMEOUT,
-        type=int,
-        help="Connection timeout in seconds.\nDefault: " + str(DEFAULT_TIMEOUT),
-    ),
-    optional.add_argument(
-        "-r",
-        "--retries",
-        metavar="x",
-        required=False,
-        default=DEFAULT_RETRIES,
-        type=int,
-        help="Connection retries.\nDefault: " + str(DEFAULT_RETRIES),
-    ),
-    optional.add_argument("--help", action="help", help="Show this help message and exit")
-    optional.add_argument(
-        "--version",
-        action="version",
-        version="%(prog)s " + VERSION + " by cytopia",
-        help="Show version information",
-    )
-    parser.add_argument("URL", type=str, help="The base URL to scan.")
-    return parser.parse_args()
+    return False
 
 
 # -------------------------------------------------------------------------------------------------
@@ -506,7 +501,7 @@ def main():
                             )
                         else:
                             code = conn.status_code
-                            if str(code) in codes:
+                            if check_code(code, codes):
                                 print_succ(
                                     "[{code}] [{m}] {target}".format(
                                         code=code, m=method, target=target
