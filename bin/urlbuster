@@ -368,13 +368,13 @@ def main():
                     for s, slash in enumerate(slashs):
                         target = url + "/" + word + slash
                         for retry in range(args.retries):
-                            status = "({curr}/{total}): [{m}] {target} {n/r}".format(
+                            status = "({curr}/{total}): [{m}] {target} ({n}/{r})".format(
                                 curr=num_curr,
                                 total=num_total,
                                 m=method,
                                 target=target,
                                 n=retry + 1,
-                                r=args.retry,
+                                r=args.retries,
                             )
                             print_status(status)
                             succ, conn = request(target, method, host, agent, args.timeout)
