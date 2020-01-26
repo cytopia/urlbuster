@@ -13,7 +13,7 @@ import requests
 # GLOBALS
 # -------------------------------------------------------------------------------------------------
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 DEFAULT_USERAGENT = "urlbuster"
 DEFAULT_SLASH = "no"
@@ -58,6 +58,32 @@ def read_file(filepath):
         content = f.readlines()
     # Remove whitespace characters like '\n' at the end of each line
     return [x.strip() for x in content]
+
+
+# -------------------------------------------------------------------------------------------------
+# URL FUNCTIONS
+# -------------------------------------------------------------------------------------------------
+
+
+def request(url, method, host, useragent):
+    """Open an http request."""
+    # Headers
+    headers = requests.utils.default_headers()
+    if host is not None:
+        headers["Host"] = host
+    if useragent is not None:
+        headers["User-Agent"] = useragent
+    # Methods
+    if method == "GET":
+        return requests.get(url, headers=headers, allow_redirects=False)
+    elif method == "POST":
+        return requests.post(url, headers=headers, data={}, allow_redirects=False)
+    elif method == "PUT":
+        return requests.put(url, headers=headers, data={}, allow_redirects=False)
+    elif method == "DELETE":
+        return requests.delete(url, headers=headers, data={}, allow_redirects=False)
+    elif method == "PATCH":
+        return requests.patch(url, headers=headers, allow_redirects=False)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -210,27 +236,6 @@ multiple useragents and multiple host headers.
 # -------------------------------------------------------------------------------------------------
 # MAIN ENTRYPOINT
 # -------------------------------------------------------------------------------------------------
-
-
-def request(url, method, host, useragent):
-    """Open an http request."""
-    # Headers
-    headers = requests.utils.default_headers()
-    if host is not None:
-        headers["Host"] = host
-    if useragent is not None:
-        headers["User-Agent"] = useragent
-    # Methods
-    if method == "GET":
-        return requests.get(url, headers=headers, allow_redirects=False)
-    elif method == "POST":
-        return requests.post(url, headers=headers, data={}, allow_redirects=False)
-    elif method == "PUT":
-        return requests.put(url, headers=headers, data={}, allow_redirects=False)
-    elif method == "DELETE":
-        return requests.delete(url, headers=headers, data={}, allow_redirects=False)
-    elif method == "PATCH":
-        return requests.patch(url, headers=headers, allow_redirects=False)
 
 
 def main():
