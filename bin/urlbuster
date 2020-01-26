@@ -1,0 +1,324 @@
+#!/usr/bin/env python
+"""Enumerate SMTP users on slow SMTP servers."""
+
+from __future__ import print_function
+
+import os
+import sys
+import argparse
+import requests
+
+
+# -------------------------------------------------------------------------------------------------
+# GLOBALS
+# -------------------------------------------------------------------------------------------------
+
+VERSION = '0.1.0'
+
+DEFAULT_USERAGENT = "urlbuster"
+DEFAULT_SLASH = "no"
+SUPPORTED_SLASHS = {
+    "no": [''],
+    "yes": ['/'],
+    "both": ['', '/'],
+}
+DEFAULT_METHOD = "GET"
+SUPPORTED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"]
+
+DEFAULT_CODES = ["200", "204", "301", "302", "307", "403"]
+
+
+# -------------------------------------------------------------------------------------------------
+# HELPER FUNCTIONS
+# -------------------------------------------------------------------------------------------------
+
+
+def print_status(data):
+    """Print temporary status."""
+    status = "{color}[TEST] {data} ...{rst}".format(
+        color="\033[93m", data=data, rst="\033[00m"
+    )
+    print(status, end="\r")
+    sys.stdout.flush()
+
+
+def clear_status(data):
+    """Deletet temporary status."""
+    status = "{color}[TEST] {data} ...{rst}".format(
+        color="\033[93m", data=data, rst="\033[00m"
+    )
+    print(" "*len(status), end="\r")  # clear line
+    sys.stdout.flush()
+
+
+# -------------------------------------------------------------------------------------------------
+# FILE FUNCTIONS
+# -------------------------------------------------------------------------------------------------
+
+
+def read_file(filepath):
+    """Read words from file line by line and store each line as a list entry."""
+    with open(filepath) as f:
+        content = f.readlines()
+    # Remove whitespace characters like '\n' at the end of each line
+    return [x.strip() for x in content]
+
+
+# -------------------------------------------------------------------------------------------------
+# ARGS
+# -------------------------------------------------------------------------------------------------
+
+
+def _args_check_codes(value):
+    """Check argument for valid status codes."""
+    strval = value
+    for code in strval.split(","):
+        try:
+            code = int(code)
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                'Invalid status code "%s"'
+            )
+        if code < 100 or code >= 600:
+            raise argparse.ArgumentTypeError(
+                'Invalid status code "%s"'
+            )
+    return strval
+
+
+def _args_check_method(value):
+    """Check argument for valid methods."""
+    strval = value
+    for method in strval.split(","):
+        if method not in SUPPORTED_METHODS:
+            raise argparse.ArgumentTypeError(
+                'Invalid method "%s". Supported: %s' % (value, ", ".join(SUPPORTED_METHODS))
+            )
+    return strval
+
+
+def _args_check_slash(value):
+    """Check argument for valid slash value."""
+    strval = value
+    if strval not in SUPPORTED_SLASHS.keys():
+        raise argparse.ArgumentTypeError(
+            'Invalid slash value "%s". Supported: %s' % (value, ", ".join(SUPPORTED_SLASHS.keys()))
+        )
+    return strval
+
+
+def _args_check_file(value):
+    """Check argument for existing file."""
+    strval = value
+    if not os.path.isfile(strval):
+        raise argparse.ArgumentTypeError('File "%s" not found.' % value)
+    return strval
+
+
+def get_args():
+    """Retrieve command line arguments."""
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawTextHelpFormatter,
+        add_help=False,
+        usage="""%(prog)s [options] -w <path> URL
+       %(prog)s --help
+       %(prog)s --version
+""",
+    )
+    required = parser.add_argument_group('required arguments')
+    optional = parser.add_argument_group('optional arguments')
+    required.add_argument(
+        "-w",
+        "--wordlist",
+        metavar="f",
+        required=True,
+        type=_args_check_file,
+        help="The path of the wordlist.",
+    )
+    optional.add_argument(
+        "-c",
+        "--code",
+        metavar="str",
+        required=False,
+        default=",".join(DEFAULT_CODES),
+        type=_args_check_codes,
+        help="Comma separated list of HTTP status code to treat as success."
+        + "\nDefault: "
+        + ", ".join(DEFAULT_CODES),
+    )
+    optional.add_argument(
+        "-m",
+        "--method",
+        metavar="str",
+        required=False,
+        default=DEFAULT_METHOD,
+        type=_args_check_method,
+        help="Comma separated list of HTTP methods to test for each request.\nSupported methods: "
+        + "Note, each supplied method will double the number of requests.\n"
+        + ", ".join(SUPPORTED_METHODS)
+        + "\nDefault: "
+        + DEFAULT_METHOD,
+    )
+    optional.add_argument(
+        "-s",
+        "--slash",
+        metavar="str",
+        required=False,
+        default='no',
+        type=_args_check_slash,
+        help="Append or omit a trailing slash to URLs to test.\n"
+        + "Options: " + ", ".join(SUPPORTED_SLASHS.keys())
+        + ".Note using 'both' will double the number of requests.\n"
+        + "Default: " + DEFAULT_SLASH,
+    )
+    agent = optional.add_mutually_exclusive_group(required=False)
+    agent.add_argument(
+        "-a", "--agent", metavar="str", required=False, type=str, help="Useragent header to send."
+    )
+    agent.add_argument(
+        "-A",
+        "--agent-file",
+        metavar="f",
+        required=False,
+        type=_args_check_file,
+        help="Newline separated list of useragents to use.\n"
+        + "Note, each supplied useragent will double the number of requests."
+    )
+    host = optional.add_mutually_exclusive_group(required=False)
+    host.add_argument(
+        "-h", "--host", metavar="str", required=False, type=str, help="Host header to send."
+    )
+    host.add_argument(
+        "-H",
+        "--host-file",
+        metavar="f",
+        required=False,
+        type=_args_check_file,
+        help="Newline separated list of host headers to send.\n"
+        + "Note, each supplied host header will double the number of requests."
+    )
+    optional.add_argument("--help", action="help", help="Show this help message and exit")
+    optional.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s "+VERSION+" by cytopia",
+        help="Show version information,",
+    )
+    parser.add_argument("URL", type=str, help="The base URL to scan.")
+    return parser.parse_args()
+
+
+# -------------------------------------------------------------------------------------------------
+# MAIN ENTRYPOINT
+# -------------------------------------------------------------------------------------------------
+
+
+def request(url, method, host, useragent):
+    """Open an http request."""
+    # Headers
+    headers = {}
+    if host is not None:
+        headers["Host"] = host
+    if useragent is not None:
+        headers["User-Agent"] = useragent
+    # Methods
+    if method == "GET":
+        return requests.get(url, headers=headers, allow_redirects=False)
+    elif method == "POST":
+        return requests.post(url, headers=headers, data={}, allow_redirects=False)
+    elif method == "PUT":
+        return requests.put(url, headers=headers, data={}, allow_redirects=False)
+    elif method == "DELETE":
+        return requests.delete(url, headers=headers, data={}, allow_redirects=False)
+    elif method == "PATCH":
+        return requests.patch(url, headers=headers, allow_redirects=False)
+
+
+def main():
+    """Start the program."""
+    args = get_args()
+
+    # Get list of useragents
+    agents = [DEFAULT_USERAGENT]
+    if args.agent is not None:
+        agents = [args.agent]
+    elif args.agent_file is not None:
+        agents = read_file(args.agent_file)
+
+    # Get list of host headers
+    hosts = []
+    if args.host is not None:
+        hosts = [args.host]
+    elif args.host_file is not None:
+        hosts = read_file(args.host_file)
+
+    # Get list of methods
+    methods = [DEFAULT_METHOD]
+    if args.method is not None:
+        methods = args.method.split(",")
+
+    # Get list of slashes
+    slashs = SUPPORTED_SLASHS[DEFAULT_SLASH]
+    if args.slash is not None:
+        slashs = SUPPORTED_SLASHS[args.slash]
+
+    # Get words
+    words = read_file(args.wordlist)
+
+    # Get base url
+    url = args.URL.rstrip('/')
+
+    # Get http status codes to treat as success
+    codes = args.code.split(",")
+
+    num_hosts = 1 if len(hosts) == 0 else len(hosts)
+    num_total = len(agents) * len(methods) * num_hosts * len(words) * len(slashs)
+    print("Base URL:       {url}".format(url=url))
+    print("Valid codes:    {codes}".format(codes=", ".join(codes)))
+    print("Useragents:     {num}".format(num=len(agents)))
+    print("Host headers:   {num}".format(num=len(hosts)))
+    print("Methods:        {num} ({m})".format(num=len(methods), m=", ".join(methods)))
+    print("Words:          {num}".format(num=len(words)))
+    print("Slashs:         {slash}".format(slash=args.slash))
+    print()
+    print("Total requests: {num}".format(num=(num_total)))
+    print()
+
+    num_curr = 1
+    for a, agent in enumerate(agents):
+        print("#"*100)
+        print("[HEADER] User-Agent: %s" % agent)
+        print("#"*100)
+        for h, host in enumerate([None] if len(hosts) == 0 else hosts):
+            if len(hosts) > 0:
+                print("-"*80)
+                print("[HEADER] Host: %s" % host)
+                print("-"*80)
+            for m, method in enumerate(methods):
+                for w, word in enumerate(words):
+                    for s, slash in enumerate(slashs):
+                        target = url + "/" + word + slash
+                        status = "({curr}/{total}): [{m}] {target}".format(
+                            curr=num_curr, total=num_total, m=method, target=target,
+                        )
+                        print_status(status)
+                        conn = request(target, method, host, agent)
+                        code = conn.status_code
+                        clear_status(status)
+                        if str(code) in codes:
+                            print("{c}[{code}] [{m}] {target}{r}".format(
+                                c="\033[92m",
+                                code=code, m=method, target=target,
+                                r="\033[00m"
+                            ))
+                        num_curr += 1
+    print()
+
+
+if __name__ == "__main__":
+    # Catch Ctrl+c and exit without error message
+    try:
+        main()
+    except KeyboardInterrupt:
+        print()
+        sys.exit(1)
