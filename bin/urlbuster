@@ -216,7 +216,7 @@ def get_args():
 def request(url, method, host, useragent):
     """Open an http request."""
     # Headers
-    headers = {}
+    headers = requests.utils.default_headers()
     if host is not None:
         headers["Host"] = host
     if useragent is not None:
