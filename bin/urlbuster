@@ -343,6 +343,8 @@ def main():
     num_hosts = 1 if len(hosts) == 0 else len(hosts)
     num_total = len(agents) * len(methods) * num_hosts * len(words) * len(slashs)
     print("Base URL:       {url}".format(url=url))
+    print("Timeout:        {timeout}s".format(timeout=args.timeout))
+    print("Retries:        {retries}".format(retries=args.retries))
     print("Valid codes:    {codes}".format(codes=", ".join(codes)))
     print("Useragents:     {num}".format(num=len(agents)))
     print("Host headers:   {num}".format(num=len(hosts)))

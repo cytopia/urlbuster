@@ -90,6 +90,8 @@ $ urlbuster \
   http://domain.tld
 
 Base URL:       http://domain.tld
+Timeout:        10s
+Retries:        3
 Valid codes:    200, 204, 301, 302, 307, 403
 Useragents:     2
 Host headers:   0
