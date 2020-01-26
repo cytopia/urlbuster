@@ -13,7 +13,7 @@ import requests
 # GLOBALS
 # -------------------------------------------------------------------------------------------------
 
-VERSION = "0.1.1"
+VERSION = "0.2.0"
 
 DEFAULT_USERAGENT = "urlbuster"
 DEFAULT_SLASH = "no"
@@ -24,8 +24,9 @@ SUPPORTED_SLASHS = {
 }
 DEFAULT_METHOD = "GET"
 SUPPORTED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"]
-
 DEFAULT_CODES = ["200", "204", "301", "302", "307", "403"]
+DEFAULT_TIMEOUT = 5
+DEFAULT_RETRIES = 3
 
 
 # -------------------------------------------------------------------------------------------------
@@ -35,16 +36,26 @@ DEFAULT_CODES = ["200", "204", "301", "302", "307", "403"]
 
 def print_status(data):
     """Print temporary status."""
-    status = "{color}[TEST] {data} ...{rst}".format(color="\033[93m", data=data, rst="\033[00m")
+    status = "{color}[TEST] {data}{rst}".format(color="\033[93m", data=data, rst="\033[00m")
     print(status, end="\r")
     sys.stdout.flush()
 
 
 def clear_status(data):
     """Deletet temporary status."""
-    status = "{color}[TEST] {data} ...{rst}".format(color="\033[93m", data=data, rst="\033[00m")
+    status = "{color}[TEST] {data}{rst}".format(color="\033[93m", data=data, rst="\033[00m")
     print(" " * len(status), end="\r")  # clear line
     sys.stdout.flush()
+
+
+def print_succ(data):
+    """Print success."""
+    print("{color}{data}{rst}".format(color="\033[92m", data=data, rrst="\033[00m"))
+
+
+def print_err(data):
+    """Print success."""
+    print("{color}{data}{rst}".format(color="\033[91m", data=data, rrst="\033[00m"))
 
 
 # -------------------------------------------------------------------------------------------------
@@ -65,7 +76,7 @@ def read_file(filepath):
 # -------------------------------------------------------------------------------------------------
 
 
-def request(url, method, host, useragent):
+def request(url, method, host, useragent, timeout):
     """Open an http request."""
     # Headers
     headers = requests.utils.default_headers()
@@ -74,16 +85,42 @@ def request(url, method, host, useragent):
     if useragent is not None:
         headers["User-Agent"] = useragent
     # Methods
-    if method == "GET":
-        return requests.get(url, headers=headers, allow_redirects=False)
-    elif method == "POST":
-        return requests.post(url, headers=headers, data={}, allow_redirects=False)
-    elif method == "PUT":
-        return requests.put(url, headers=headers, data={}, allow_redirects=False)
-    elif method == "DELETE":
-        return requests.delete(url, headers=headers, data={}, allow_redirects=False)
-    elif method == "PATCH":
-        return requests.patch(url, headers=headers, allow_redirects=False)
+    try:
+        if method == "GET":
+            return True, requests.get(url, headers=headers, allow_redirects=False, timeout=timeout)
+        elif method == "POST":
+            return (
+                True,
+                requests.post(
+                    url, headers=headers, data={}, allow_redirects=False, timeout=timeout
+                ),
+            )
+        elif method == "PUT":
+            return (
+                True,
+                requests.put(url, headers=headers, data={}, allow_redirects=False, timeout=timeout),
+            )
+        elif method == "DELETE":
+            return (
+                True,
+                requests.delete(
+                    url, headers=headers, data={}, allow_redirects=False, timeout=timeout
+                ),
+            )
+        elif method == "PATCH":
+            return (
+                True,
+                requests.patch(url, headers=headers, allow_redirects=False, timeout=timeout),
+            )
+    except requests.exceptions.Timeout as err:
+        # Maybe set up for a retry, or continue in a retry loop
+        return False, {"type": "timeout", "err": err}
+    except requests.exceptions.TooManyRedirects as err:
+        # Tell the user their URL was bad and try a different one
+        return False, {"type": "toomanyredirects", "err": err}
+    except requests.exceptions.RequestException as err:
+        # catastrophic error. bail.
+        return False, {"type": "exception", "err": err}
 
 
 # -------------------------------------------------------------------------------------------------
@@ -222,6 +259,24 @@ multiple useragents and multiple host headers.
         help="Newline separated list of host headers to send.\n"
         + "Note, each supplied host header will double the number of requests.",
     )
+    optional.add_argument(
+        "-t",
+        "--timeout",
+        metavar="s",
+        required=False,
+        default=DEFAULT_TIMEOUT,
+        type=int,
+        help="Connection timeout in seconds.\nDefault: " + str(DEFAULT_TIMEOUT),
+    ),
+    optional.add_argument(
+        "-r",
+        "--retries",
+        metavar="x",
+        required=False,
+        default=DEFAULT_RETRIES,
+        type=int,
+        help="Connection retries.\nDefault: " + str(DEFAULT_RETRIES),
+    ),
     optional.add_argument("--help", action="help", help="Show this help message and exit")
     optional.add_argument(
         "--version",
@@ -306,15 +361,25 @@ def main():
                             curr=num_curr, total=num_total, m=method, target=target,
                         )
                         print_status(status)
-                        conn = request(target, method, host, agent)
-                        code = conn.status_code
+                        for _ in range(args.retries):
+                            succ, conn = request(target, method, host, agent, args.timeout)
+                            if succ:
+                                break
                         clear_status(status)
-                        if str(code) in codes:
-                            print(
-                                "{c}[{code}] [{m}] {target}{r}".format(
-                                    c="\033[92m", code=code, m=method, target=target, r="\033[00m"
+                        if not succ:
+                            print_err(
+                                "[ERR] [{m}] {target}: {msg}".format(
+                                    m=method, target=target, msg=conn["exception"]
                                 )
                             )
+                        else:
+                            code = conn.status_code
+                            if str(code) in codes:
+                                print_succ(
+                                    "[{code}] [{m}] {target}".format(
+                                        code=code, m=method, target=target
+                                    )
+                                )
                         num_curr += 1
     print()
 

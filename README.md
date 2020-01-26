@@ -66,6 +66,10 @@ optional arguments:
   -h str, --host str    Host header to send.
   -H f, --host-file f   Newline separated list of host headers to send.
                         Note, each supplied host header will double the number of requests.
+  -t s, --timeout s     Connection timeout in seconds.
+                        Default: 5
+  -r x, --retries x     Connection retries.
+                        Default: 3
   --help                Show this help message and exit
   --version             Show version information
 ```
