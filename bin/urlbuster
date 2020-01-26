@@ -124,6 +124,12 @@ def get_args():
        %(prog)s --help
        %(prog)s --version
 """,
+        description="""URL bruteforcer to locate existing and/or hidden files or directories.
+
+Similar to dirb or gobuster, but also allows to iterate over multiple HTTP request methods,
+multiple useragents and multiple host headers.
+""",
+
     )
     required = parser.add_argument_group('required arguments')
     optional = parser.add_argument_group('optional arguments')
@@ -202,7 +208,7 @@ def get_args():
         "--version",
         action="version",
         version="%(prog)s "+VERSION+" by cytopia",
-        help="Show version information,",
+        help="Show version information",
     )
     parser.add_argument("URL", type=str, help="The base URL to scan.")
     return parser.parse_args()

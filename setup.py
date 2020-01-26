@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 setup(
     name="urlbuster",
     version="0.1.0",
-    description="URL bruteforcer to locate existing and/or hidden files or directories",
+    description="URL bruteforcer to locate existing and/or hidden files or directories.",
     license="MIT",
     long_description=long_description,
     long_description_content_type="text/markdown",
