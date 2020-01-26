@@ -400,7 +400,7 @@ def request(url, method, host, useragent, timeout, insecure, proxy):
 def check_code(code, codes):
     """Check if http status code is a successful code."""
     for reg in codes:
-        if re.match(reg, code):
+        if re.match(reg, str(code)):
             return True
 
     return False
