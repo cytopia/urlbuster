@@ -55,7 +55,7 @@ optional arguments:
                         Default: 200, 204, 301, 302, 307, 403
   -m str, --method str  Comma separated list of HTTP methods to test for each request.
                         Supported methods: Note, each supplied method will double the number of requests.
-                        GET, POST, PUT, DELETE, PATCH
+                        GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
                         Default: GET
   -s str, --slash str   Append or omit a trailing slash to URLs to test.
                         Options: both, yes, no.Note using 'both' will double the number of requests.
@@ -66,6 +66,10 @@ optional arguments:
   -h str, --host str    Host header to send.
   -H f, --host-file f   Newline separated list of host headers to send.
                         Note, each supplied host header will double the number of requests.
+  -t s, --timeout s     Connection timeout in seconds.
+                        Default: 5
+  -r x, --retries x     Connection retries.
+                        Default: 3
   --help                Show this help message and exit
   --version             Show version information
 ```
@@ -86,6 +90,8 @@ $ urlbuster \
   http://domain.tld
 
 Base URL:       http://domain.tld
+Timeout:        10s
+Retries:        3
 Valid codes:    200, 204, 301, 302, 307, 403
 Useragents:     2
 Host headers:   0
