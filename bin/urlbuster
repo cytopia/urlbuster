@@ -13,14 +13,14 @@ import requests
 # GLOBALS
 # -------------------------------------------------------------------------------------------------
 
-VERSION = '0.1.0'
+VERSION = "0.1.0"
 
 DEFAULT_USERAGENT = "urlbuster"
 DEFAULT_SLASH = "no"
 SUPPORTED_SLASHS = {
-    "no": [''],
-    "yes": ['/'],
-    "both": ['', '/'],
+    "no": [""],
+    "yes": ["/"],
+    "both": ["", "/"],
 }
 DEFAULT_METHOD = "GET"
 SUPPORTED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"]
@@ -35,19 +35,15 @@ DEFAULT_CODES = ["200", "204", "301", "302", "307", "403"]
 
 def print_status(data):
     """Print temporary status."""
-    status = "{color}[TEST] {data} ...{rst}".format(
-        color="\033[93m", data=data, rst="\033[00m"
-    )
+    status = "{color}[TEST] {data} ...{rst}".format(color="\033[93m", data=data, rst="\033[00m")
     print(status, end="\r")
     sys.stdout.flush()
 
 
 def clear_status(data):
     """Deletet temporary status."""
-    status = "{color}[TEST] {data} ...{rst}".format(
-        color="\033[93m", data=data, rst="\033[00m"
-    )
-    print(" "*len(status), end="\r")  # clear line
+    status = "{color}[TEST] {data} ...{rst}".format(color="\033[93m", data=data, rst="\033[00m")
+    print(" " * len(status), end="\r")  # clear line
     sys.stdout.flush()
 
 
@@ -76,13 +72,9 @@ def _args_check_codes(value):
         try:
             code = int(code)
         except ValueError:
-            raise argparse.ArgumentTypeError(
-                'Invalid status code "%s"'
-            )
+            raise argparse.ArgumentTypeError('Invalid status code "%s"')
         if code < 100 or code >= 600:
-            raise argparse.ArgumentTypeError(
-                'Invalid status code "%s"'
-            )
+            raise argparse.ArgumentTypeError('Invalid status code "%s"')
     return strval
 
 
@@ -129,10 +121,9 @@ def get_args():
 Similar to dirb or gobuster, but also allows to iterate over multiple HTTP request methods,
 multiple useragents and multiple host headers.
 """,
-
     )
-    required = parser.add_argument_group('required arguments')
-    optional = parser.add_argument_group('optional arguments')
+    required = parser.add_argument_group("required arguments")
+    optional = parser.add_argument_group("optional arguments")
     required.add_argument(
         "-w",
         "--wordlist",
@@ -170,12 +161,14 @@ multiple useragents and multiple host headers.
         "--slash",
         metavar="str",
         required=False,
-        default='no',
+        default="no",
         type=_args_check_slash,
         help="Append or omit a trailing slash to URLs to test.\n"
-        + "Options: " + ", ".join(SUPPORTED_SLASHS.keys())
+        + "Options: "
+        + ", ".join(SUPPORTED_SLASHS.keys())
         + ".Note using 'both' will double the number of requests.\n"
-        + "Default: " + DEFAULT_SLASH,
+        + "Default: "
+        + DEFAULT_SLASH,
     )
     agent = optional.add_mutually_exclusive_group(required=False)
     agent.add_argument(
@@ -188,7 +181,7 @@ multiple useragents and multiple host headers.
         required=False,
         type=_args_check_file,
         help="Newline separated list of useragents to use.\n"
-        + "Note, each supplied useragent will double the number of requests."
+        + "Note, each supplied useragent will double the number of requests.",
     )
     host = optional.add_mutually_exclusive_group(required=False)
     host.add_argument(
@@ -201,13 +194,13 @@ multiple useragents and multiple host headers.
         required=False,
         type=_args_check_file,
         help="Newline separated list of host headers to send.\n"
-        + "Note, each supplied host header will double the number of requests."
+        + "Note, each supplied host header will double the number of requests.",
     )
     optional.add_argument("--help", action="help", help="Show this help message and exit")
     optional.add_argument(
         "--version",
         action="version",
-        version="%(prog)s "+VERSION+" by cytopia",
+        version="%(prog)s " + VERSION + " by cytopia",
         help="Show version information",
     )
     parser.add_argument("URL", type=str, help="The base URL to scan.")
@@ -272,7 +265,7 @@ def main():
     words = read_file(args.wordlist)
 
     # Get base url
-    url = args.URL.rstrip('/')
+    url = args.URL.rstrip("/")
 
     # Get http status codes to treat as success
     codes = args.code.split(",")
@@ -292,14 +285,14 @@ def main():
 
     num_curr = 1
     for a, agent in enumerate(agents):
-        print("#"*100)
+        print("#" * 100)
         print("[HEADER] User-Agent: %s" % agent)
-        print("#"*100)
+        print("#" * 100)
         for h, host in enumerate([None] if len(hosts) == 0 else hosts):
             if len(hosts) > 0:
-                print("-"*80)
+                print("-" * 80)
                 print("[HEADER] Host: %s" % host)
-                print("-"*80)
+                print("-" * 80)
             for m, method in enumerate(methods):
                 for w, word in enumerate(words):
                     for s, slash in enumerate(slashs):
@@ -312,11 +305,11 @@ def main():
                         code = conn.status_code
                         clear_status(status)
                         if str(code) in codes:
-                            print("{c}[{code}] [{m}] {target}{r}".format(
-                                c="\033[92m",
-                                code=code, m=method, target=target,
-                                r="\033[00m"
-                            ))
+                            print(
+                                "{c}[{code}] [{m}] {target}{r}".format(
+                                    c="\033[92m", code=code, m=method, target=target, r="\033[00m"
+                                )
+                            )
                         num_curr += 1
     print()
 
