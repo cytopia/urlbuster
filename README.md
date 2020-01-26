@@ -26,6 +26,7 @@ multiple useragents and multiple host headers.
 * Test different request methods
 * Test with and without a trailing slash
 * Specify which http status code yield a successful request
+* Proxy support
 
 
 ## Installation
@@ -42,36 +43,46 @@ usage: urlbuster [options] -w <path> URL
 URL bruteforcer to locate existing and/or hidden files or directories.
 
 Similar to dirb or gobuster, but also allows to iterate over multiple HTTP request methods,
-multiple useragents and multiple host headers.
+multiple useragents and multiple host header values.
 
 positional arguments:
   URL                   The base URL to scan.
 
 required arguments:
-  -w f, --wordlist f    The path of the wordlist.
+  -w f, --wordlist f    Path to wordlist to use.
 
 optional arguments:
   -c str, --code str    Comma separated list of HTTP status code to treat as success.
-                        Default: 200, 204, 301, 302, 307, 403
-  -m str, --method str  Comma separated list of HTTP methods to test for each request.
-                        Supported methods: Note, each supplied method will double the number of requests.
-                        GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+                        Default: 200, 201, 202, 203, 204, 205, 206, 207, 208, 226, 300, 301, 302, 303, 304, 305, 306, 307, 308, 403, 407, 411, 426, 429, 500, 505, 511
+  -m str, --method str  Comma separated list of HTTP methods to test against each request.
+                        Note, each supplied method will double the number of requests.
+                        Supported methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
                         Default: GET
   -s str, --slash str   Append or omit a trailing slash to URLs to test.
-                        Options: both, yes, no.Note using 'both' will double the number of requests.
+                        Options: both, yes, no
+                        Note, using 'both' will double the number of requests.
                         Default: no
-  -a str, --agent str   Useragent header to send.
-  -A f, --agent-file f  Newline separated list of useragents to use.
+  -a str, --agent str   Useragent string to send.
+  -A f, --agent-file f  Path to a newline separated file of useragents to use.
                         Note, each supplied useragent will double the number of requests.
-  -h str, --host str    Host header to send.
-  -H f, --host-file f   Newline separated list of host headers to send.
-                        Note, each supplied host header will double the number of requests.
+  -h str, --host str    Host header value to send.
+  -H f, --host-file f   Path to a newline separated file of host header values to send.
+                        Note, each supplied host header value will double the number of requests.
+  -k, --insecure        Do not verify TLS certificates.
+  -p str, --proxy str   Use a proxy for all requests.
+                        Format: http://<host>:<port> or http://<user>:<pass>@<host>:<port>
   -t s, --timeout s     Connection timeout in seconds.
                         Default: 5
   -r x, --retries x     Connection retries.
                         Default: 3
   --help                Show this help message and exit
   --version             Show version information
+
+examples
+
+  urlbuster -w /path/to/words http://example.com
+  urlbuster -w /path/to/words http://example.com:8000
+  urlbuster -k -w /path/to/words https://example.com:10000
 ```
 
 

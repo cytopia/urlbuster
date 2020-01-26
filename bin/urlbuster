@@ -13,7 +13,7 @@ import requests
 # GLOBALS
 # -------------------------------------------------------------------------------------------------
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 DEFAULT_USERAGENT = "urlbuster"
 DEFAULT_SLASH = "no"
@@ -24,7 +24,35 @@ SUPPORTED_SLASHS = {
 }
 DEFAULT_METHOD = "GET"
 SUPPORTED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
-DEFAULT_CODES = ["200", "204", "301", "302", "307", "403"]
+DEFAULT_CODES = [
+    "200",
+    "201",
+    "202",
+    "203",
+    "204",
+    "205",
+    "206",
+    "207",
+    "208",
+    "226",
+    "300",
+    "301",
+    "302",
+    "303",
+    "304",
+    "305",
+    "306",
+    "307",
+    "308",
+    "403",
+    "407",
+    "411",
+    "426",
+    "429",
+    "500",
+    "505",
+    "511",
+]
 DEFAULT_TIMEOUT = 5
 DEFAULT_RETRIES = 3
 
@@ -76,7 +104,7 @@ def read_file(filepath):
 # -------------------------------------------------------------------------------------------------
 
 
-def request(url, method, host, useragent, timeout):
+def request(url, method, host, useragent, timeout, insecure, proxy):
     """Open an http request."""
     # Headers
     headers = requests.utils.default_headers()
@@ -84,43 +112,103 @@ def request(url, method, host, useragent, timeout):
         headers["Host"] = host
     if useragent is not None:
         headers["User-Agent"] = useragent
+    # Verify SSL connections?
+    verify = not insecure
+    # Add proxies?
+    proxies = {}
+    if proxy is not None:
+        proxies = {
+            "http": proxy,
+            "https": proxy,
+        }
     # Methods
     try:
         if method == "GET":
-            return True, requests.get(url, headers=headers, allow_redirects=False, timeout=timeout)
+            return (
+                True,
+                requests.get(
+                    url,
+                    headers=headers,
+                    allow_redirects=False,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies=proxies,
+                ),
+            )
         elif method == "POST":
             return (
                 True,
                 requests.post(
-                    url, headers=headers, data={}, allow_redirects=False, timeout=timeout
+                    url,
+                    headers=headers,
+                    data={},
+                    allow_redirects=False,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies=proxies,
                 ),
             )
         elif method == "PUT":
             return (
                 True,
-                requests.put(url, headers=headers, data={}, allow_redirects=False, timeout=timeout),
+                requests.put(
+                    url,
+                    headers=headers,
+                    data={},
+                    allow_redirects=False,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies=proxies,
+                ),
             )
         elif method == "DELETE":
             return (
                 True,
                 requests.delete(
-                    url, headers=headers, data={}, allow_redirects=False, timeout=timeout
+                    url,
+                    headers=headers,
+                    data={},
+                    allow_redirects=False,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies=proxies,
                 ),
             )
         elif method == "PATCH":
             return (
                 True,
-                requests.patch(url, headers=headers, allow_redirects=False, timeout=timeout),
+                requests.patch(
+                    url,
+                    headers=headers,
+                    allow_redirects=False,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies=proxies,
+                ),
             )
         elif method == "OPTIONS":
             return (
                 True,
-                requests.options(url, headers=headers, allow_redirects=False, timeout=timeout),
+                requests.options(
+                    url,
+                    headers=headers,
+                    allow_redirects=False,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies=proxies,
+                ),
             )
         elif method == "HEAD":
             return (
                 True,
-                requests.head(url, headers=headers, allow_redirects=False, timeout=timeout),
+                requests.head(
+                    url,
+                    headers=headers,
+                    allow_redirects=False,
+                    timeout=timeout,
+                    verify=verify,
+                    proxies=proxies,
+                ),
             )
     except requests.exceptions.Timeout as err:
         # Maybe set up for a retry, or continue in a retry loop
@@ -192,8 +280,13 @@ def get_args():
         description="""URL bruteforcer to locate existing and/or hidden files or directories.
 
 Similar to dirb or gobuster, but also allows to iterate over multiple HTTP request methods,
-multiple useragents and multiple host headers.
+multiple useragents and multiple host header values.
 """,
+        epilog="""examples
+
+  %(prog)s -w /path/to/words http://example.com
+  %(prog)s -w /path/to/words http://example.com:8000
+  %(prog)s -k -w /path/to/words https://example.com:10000""",
     )
     required = parser.add_argument_group("required arguments")
     optional = parser.add_argument_group("optional arguments")
@@ -203,7 +296,7 @@ multiple useragents and multiple host headers.
         metavar="f",
         required=True,
         type=_args_check_file,
-        help="The path of the wordlist.",
+        help="Path to wordlist to use.",
     )
     optional.add_argument(
         "-c",
@@ -223,10 +316,12 @@ multiple useragents and multiple host headers.
         required=False,
         default=DEFAULT_METHOD,
         type=_args_check_method,
-        help="Comma separated list of HTTP methods to test for each request.\nSupported methods: "
+        help="Comma separated list of HTTP methods to test against each request.\n"
         + "Note, each supplied method will double the number of requests.\n"
+        + "Supported methods: "
         + ", ".join(SUPPORTED_METHODS)
-        + "\nDefault: "
+        + "\n"
+        + "Default: "
         + DEFAULT_METHOD,
     )
     optional.add_argument(
@@ -239,13 +334,14 @@ multiple useragents and multiple host headers.
         help="Append or omit a trailing slash to URLs to test.\n"
         + "Options: "
         + ", ".join(SUPPORTED_SLASHS.keys())
-        + ".Note using 'both' will double the number of requests.\n"
+        + "\n"
+        + "Note, using 'both' will double the number of requests.\n"
         + "Default: "
         + DEFAULT_SLASH,
     )
     agent = optional.add_mutually_exclusive_group(required=False)
     agent.add_argument(
-        "-a", "--agent", metavar="str", required=False, type=str, help="Useragent header to send."
+        "-a", "--agent", metavar="str", required=False, type=str, help="Useragent string to send."
     )
     agent.add_argument(
         "-A",
@@ -253,12 +349,12 @@ multiple useragents and multiple host headers.
         metavar="f",
         required=False,
         type=_args_check_file,
-        help="Newline separated list of useragents to use.\n"
+        help="Path to a newline separated file of useragents to use.\n"
         + "Note, each supplied useragent will double the number of requests.",
     )
     host = optional.add_mutually_exclusive_group(required=False)
     host.add_argument(
-        "-h", "--host", metavar="str", required=False, type=str, help="Host header to send."
+        "-h", "--host", metavar="str", required=False, type=str, help="Host header value to send."
     )
     host.add_argument(
         "-H",
@@ -266,9 +362,26 @@ multiple useragents and multiple host headers.
         metavar="f",
         required=False,
         type=_args_check_file,
-        help="Newline separated list of host headers to send.\n"
-        + "Note, each supplied host header will double the number of requests.",
+        help="Path to a newline separated file of host header values to send.\n"
+        + "Note, each supplied host header value will double the number of requests.",
     )
+    optional.add_argument(
+        "-k",
+        "--insecure",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Do not verify TLS certificates.",
+    ),
+    optional.add_argument(
+        "-p",
+        "--proxy",
+        metavar="str",
+        required=False,
+        type=str,
+        help="Use a proxy for all requests.\n"
+        + "Format: http://<host>:<port> or http://<user>:<pass>@<host>:<port>",
+    ),
     optional.add_argument(
         "-t",
         "--timeout",
@@ -379,7 +492,9 @@ def main():
                                 r=args.retries,
                             )
                             print_status(status)
-                            succ, conn = request(target, method, host, agent, args.timeout)
+                            succ, conn = request(
+                                target, method, host, agent, args.timeout, args.insecure, args.proxy
+                            )
                             clear_status(status)
                             if succ:
                                 break
