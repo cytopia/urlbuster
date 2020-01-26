@@ -23,7 +23,7 @@ SUPPORTED_SLASHS = {
     "both": ["", "/"],
 }
 DEFAULT_METHOD = "GET"
-SUPPORTED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"]
+SUPPORTED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 DEFAULT_CODES = ["200", "204", "301", "302", "307", "403"]
 DEFAULT_TIMEOUT = 5
 DEFAULT_RETRIES = 3
@@ -50,12 +50,12 @@ def clear_status(data):
 
 def print_succ(data):
     """Print success."""
-    print("{color}{data}{rst}".format(color="\033[92m", data=data, rrst="\033[00m"))
+    print("{color}{data}{rst}".format(color="\033[92m", data=data, rst="\033[00m"))
 
 
 def print_err(data):
     """Print success."""
-    print("{color}{data}{rst}".format(color="\033[91m", data=data, rrst="\033[00m"))
+    print("{color}{data}{rst}".format(color="\033[91m", data=data, rst="\033[00m"))
 
 
 # -------------------------------------------------------------------------------------------------
@@ -111,6 +111,16 @@ def request(url, method, host, useragent, timeout):
             return (
                 True,
                 requests.patch(url, headers=headers, allow_redirects=False, timeout=timeout),
+            )
+        elif method == "OPTIONS":
+            return (
+                True,
+                requests.options(url, headers=headers, allow_redirects=False, timeout=timeout),
+            )
+        elif method == "HEAD":
+            return (
+                True,
+                requests.head(url, headers=headers, allow_redirects=False, timeout=timeout),
             )
     except requests.exceptions.Timeout as err:
         # Maybe set up for a retry, or continue in a retry loop

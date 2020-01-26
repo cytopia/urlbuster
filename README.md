@@ -55,7 +55,7 @@ optional arguments:
                         Default: 200, 204, 301, 302, 307, 403
   -m str, --method str  Comma separated list of HTTP methods to test for each request.
                         Supported methods: Note, each supplied method will double the number of requests.
-                        GET, POST, PUT, DELETE, PATCH
+                        GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
                         Default: GET
   -s str, --slash str   Append or omit a trailing slash to URLs to test.
                         Options: both, yes, no.Note using 'both' will double the number of requests.
