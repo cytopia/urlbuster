@@ -16,7 +16,7 @@ import requests
 
 VERSION = "0.3.0"
 
-DEFAULT_USERAGENT = "urlbuster"
+DEFAULT_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.123 Safari/537.36"  # noqa: E501
 DEFAULT_SLASH = "no"
 SUPPORTED_SLASHS = {
     "no": [""],
@@ -84,15 +84,129 @@ def read_file(filepath):
 
 
 # -------------------------------------------------------------------------------------------------
+# RETRIEVE URL PARAM FUNCTIONS
+# -------------------------------------------------------------------------------------------------
+
+
+def get_useragents(agent, agent_file):
+    """Get list of useragent strings."""
+    if agent is not None:
+        return [agent]
+    if agent_file is not None:
+        return read_file(agent_file)
+    return [DEFAULT_USERAGENT]
+
+
+def get_host_header_values(host, host_file):
+    """Get list of host header values."""
+    if host is not None:
+        return [host]
+    if host_file is not None:
+        return read_file(host_file)
+    return []
+
+
+def get_http_methods(method):
+    """Get list of HTTP methods."""
+    if method is not None:
+        return method.split(",")
+    return [DEFAULT_METHOD]
+
+
+def get_slash_values(slash):
+    """Get list with empty element and or slash element."""
+    if slash is not None:
+        return SUPPORTED_SLASHS[slash]
+    return SUPPORTED_SLASHS[DEFAULT_SLASH]
+
+
+def get_headers(custom_headers):
+    """Retrieve HTTP headers."""
+    headers = requests.utils.default_headers()
+    for header in custom_headers:
+        key, val = header.split(":")
+        headers[key] = val
+    return headers
+
+
+def get_proxies(proxy):
+    """Retrieve proxy dict to be used for requests."""
+    if proxy is not None:
+        return {
+            "http": proxy,
+            "https": proxy,
+        }
+    return {}
+
+
+def get_auth_method(auth_basic, auth_digest):
+    """Return authentication object."""
+    if auth_basic is not None:
+        return requests.auth.HTTPBasicAuth(auth_basic[0], auth_basic[1])
+    if auth_digest is not None:
+        return requests.auth.HTTPDigestAuth(auth_digest[0], auth_digest[1])
+
+
+def get_words(word, wordlist):
+    """Return list of words."""
+    if word is not None:
+        return [word]
+    return read_file(wordlist)
+
+
+# -------------------------------------------------------------------------------------------------
+# URL FUNCTIONS
+# -------------------------------------------------------------------------------------------------
+
+
+def request(url, method, auth, headers, proxies, timeout, verify):
+    """Open an http request."""
+    # requests.(get|post|delete|...)
+    fn = getattr(requests, method.lower())
+    try:
+        return (
+            True,
+            fn(
+                url,
+                data={},
+                allow_redirects=False,
+                auth=auth,
+                headers=headers,
+                proxies=proxies,
+                timeout=timeout,
+                verify=verify,
+            ),
+        )
+    except requests.exceptions.Timeout as err:
+        # Maybe set up for a retry, or continue in a retry loop
+        return False, {"type": "timeout", "err": err}
+    except requests.exceptions.TooManyRedirects as err:
+        # Tell the user their URL was bad and try a different one
+        return False, {"type": "toomanyredirects", "err": err}
+    except requests.exceptions.RequestException as err:
+        # catastrophic error. bail.
+        return False, {"type": "exception", "err": err}
+
+
+def check_code(code, codes):
+    """Check if http status code is a successful code."""
+    for reg in codes:
+        if re.match(reg, str(code)):
+            return True
+
+    return False
+
+
+# -------------------------------------------------------------------------------------------------
 # ARGS
 # -------------------------------------------------------------------------------------------------
 
 
 def _args_check_codes(value):
     """Check argument for valid status codes."""
-    strval = value
+    strval = str(value)
     for code in strval.split(","):
-        code = code.replace('.', '1')
+        code = code.replace(".", "1")
         try:
             code = int(code)
         except ValueError:
@@ -102,9 +216,18 @@ def _args_check_codes(value):
     return strval
 
 
+def _args_check_auth(value):
+    """Check argument for valid methods."""
+    strval = str(value)
+    auth = strval.split(":")
+    if len(auth) != 2:
+        raise argparse.ArgumentTypeError('Invalid auth value "%s"')
+    return strval
+
+
 def _args_check_method(value):
     """Check argument for valid methods."""
-    strval = value
+    strval = str(value)
     for method in strval.split(","):
         if method not in SUPPORTED_METHODS:
             raise argparse.ArgumentTypeError(
@@ -115,7 +238,7 @@ def _args_check_method(value):
 
 def _args_check_slash(value):
     """Check argument for valid slash value."""
-    strval = value
+    strval = str(value)
     if strval not in SUPPORTED_SLASHS.keys():
         raise argparse.ArgumentTypeError(
             'Invalid slash value "%s". Supported: %s' % (value, ", ".join(SUPPORTED_SLASHS.keys()))
@@ -125,7 +248,7 @@ def _args_check_slash(value):
 
 def _args_check_file(value):
     """Check argument for existing file."""
-    strval = value
+    strval = str(value)
     if not os.path.isfile(strval):
         raise argparse.ArgumentTypeError('File "%s" not found.' % value)
     return strval
@@ -136,7 +259,7 @@ def get_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawTextHelpFormatter,
         add_help=False,
-        usage="""%(prog)s [options] -w <path> URL
+        usage="""%(prog)s [options] -w <word>/-W <path> BASE_URL
        %(prog)s --help
        %(prog)s --version
 """,
@@ -153,13 +276,12 @@ multiple useragents and multiple host header values.
     )
     required = parser.add_argument_group("required arguments")
     optional = parser.add_argument_group("optional arguments")
-    required.add_argument(
-        "-w",
-        "--wordlist",
-        metavar="f",
-        required=True,
-        type=_args_check_file,
-        help="Path to wordlist to use.",
+    word = required.add_mutually_exclusive_group(required=True)
+    word.add_argument(
+        "-w", "--word", metavar="str", type=str, help="Word to use.",
+    )
+    word.add_argument(
+        "-W", "--wordlist", metavar="f", type=_args_check_file, help="Path to wordlist to use.",
     )
     optional.add_argument(
         "-c",
@@ -238,13 +360,28 @@ multiple useragents and multiple host header values.
         help="Do not verify TLS certificates.",
     ),
     optional.add_argument(
+        "-b",
+        "--auth-basic",
+        metavar="str",
+        required=False,
+        type=_args_check_auth,
+        help="Use basic authentication for all requests.\n" + "Format: <user>:<pass>",
+    ),
+    auth = optional.add_mutually_exclusive_group(required=False)
+    auth.add_argument(
+        "-d",
+        "--auth-digest",
+        metavar="str",
+        type=_args_check_auth,
+        help="Use digest authentication for all requests.\n" + "Format: <user>:<pass>",
+    ),
+    auth.add_argument(
         "-p",
         "--proxy",
         metavar="str",
-        required=False,
         type=str,
         help="Use a proxy for all requests.\n"
-        + "Format: http://<host>:<port> or http://<user>:<pass>@<host>:<port>",
+        + "Format: http://<host>:<port>\nFormat: http://<user>:<pass>@<host>:<port>",
     ),
     optional.add_argument(
         "-t",
@@ -271,139 +408,8 @@ multiple useragents and multiple host header values.
         version="%(prog)s " + VERSION + " by cytopia",
         help="Show version information",
     )
-    parser.add_argument("URL", type=str, help="The base URL to scan.")
+    parser.add_argument("BASE_URL", type=str, help="The base URL to scan.")
     return parser.parse_args()
-
-
-# -------------------------------------------------------------------------------------------------
-# URL FUNCTIONS
-# -------------------------------------------------------------------------------------------------
-
-
-def request(url, method, host, useragent, timeout, insecure, proxy):
-    """Open an http request."""
-    # Headers
-    headers = requests.utils.default_headers()
-    if host is not None:
-        headers["Host"] = host
-    if useragent is not None:
-        headers["User-Agent"] = useragent
-    # Verify SSL connections?
-    verify = not insecure
-    # Add proxies?
-    proxies = {}
-    if proxy is not None:
-        proxies = {
-            "http": proxy,
-            "https": proxy,
-        }
-    # Methods
-    try:
-        if method == "GET":
-            return (
-                True,
-                requests.get(
-                    url,
-                    headers=headers,
-                    allow_redirects=False,
-                    timeout=timeout,
-                    verify=verify,
-                    proxies=proxies,
-                ),
-            )
-        elif method == "POST":
-            return (
-                True,
-                requests.post(
-                    url,
-                    headers=headers,
-                    data={},
-                    allow_redirects=False,
-                    timeout=timeout,
-                    verify=verify,
-                    proxies=proxies,
-                ),
-            )
-        elif method == "PUT":
-            return (
-                True,
-                requests.put(
-                    url,
-                    headers=headers,
-                    data={},
-                    allow_redirects=False,
-                    timeout=timeout,
-                    verify=verify,
-                    proxies=proxies,
-                ),
-            )
-        elif method == "DELETE":
-            return (
-                True,
-                requests.delete(
-                    url,
-                    headers=headers,
-                    data={},
-                    allow_redirects=False,
-                    timeout=timeout,
-                    verify=verify,
-                    proxies=proxies,
-                ),
-            )
-        elif method == "PATCH":
-            return (
-                True,
-                requests.patch(
-                    url,
-                    headers=headers,
-                    allow_redirects=False,
-                    timeout=timeout,
-                    verify=verify,
-                    proxies=proxies,
-                ),
-            )
-        elif method == "OPTIONS":
-            return (
-                True,
-                requests.options(
-                    url,
-                    headers=headers,
-                    allow_redirects=False,
-                    timeout=timeout,
-                    verify=verify,
-                    proxies=proxies,
-                ),
-            )
-        elif method == "HEAD":
-            return (
-                True,
-                requests.head(
-                    url,
-                    headers=headers,
-                    allow_redirects=False,
-                    timeout=timeout,
-                    verify=verify,
-                    proxies=proxies,
-                ),
-            )
-    except requests.exceptions.Timeout as err:
-        # Maybe set up for a retry, or continue in a retry loop
-        return False, {"type": "timeout", "err": err}
-    except requests.exceptions.TooManyRedirects as err:
-        # Tell the user their URL was bad and try a different one
-        return False, {"type": "toomanyredirects", "err": err}
-    except requests.exceptions.RequestException as err:
-        # catastrophic error. bail.
-        return False, {"type": "exception", "err": err}
-
-
-def check_code(code, codes):
-    """Check if http status code is a successful code."""
-    for reg in codes:
-        if re.match(reg, str(code)):
-            return True
-
-    return False
 
 
 # -------------------------------------------------------------------------------------------------
@@ -414,36 +420,19 @@ def check_code(code, codes):
 def main():
     """Start the program."""
     args = get_args()
+    print(args)
 
-    # Get list of useragents
-    agents = [DEFAULT_USERAGENT]
-    if args.agent is not None:
-        agents = [args.agent]
-    elif args.agent_file is not None:
-        agents = read_file(args.agent_file)
-
-    # Get list of host headers
-    hosts = []
-    if args.host is not None:
-        hosts = [args.host]
-    elif args.host_file is not None:
-        hosts = read_file(args.host_file)
-
-    # Get list of methods
-    methods = [DEFAULT_METHOD]
-    if args.method is not None:
-        methods = args.method.split(",")
-
-    # Get list of slashes
-    slashs = SUPPORTED_SLASHS[DEFAULT_SLASH]
-    if args.slash is not None:
-        slashs = SUPPORTED_SLASHS[args.slash]
-
-    # Get words
-    words = read_file(args.wordlist)
+    agents = get_useragents(args.agent, args.agent_file)
+    hosts = get_host_header_values(args.host, args.host_file)
+    methods = get_http_methods(args.method)
+    slashs = get_slash_values(args.slash)
+    proxies = get_proxies(args.proxy)
+    auth = get_auth_method(args.auth_basic, args.auth_digest)
+    headers = get_headers([])
+    words = get_words(args.word, args.wordlist)
 
     # Get base url
-    url = args.URL.rstrip("/")
+    url = args.BASE_URL
 
     # Get http status codes to treat as success
     codes = args.code.split(",")
@@ -473,10 +462,17 @@ def main():
                 print("-" * 80)
                 print("[HEADER] Host: %s" % host)
                 print("-" * 80)
+
+            # Enrich headers
+            if host is not None:
+                headers["Host"] = host
+            if agent is not None:
+                headers["User-Agent"] = agent
+
             for m, method in enumerate(methods):
                 for w, word in enumerate(words):
                     for s, slash in enumerate(slashs):
-                        target = url + "/" + word + slash
+                        target = url + word + slash
                         for retry in range(args.retries):
                             status = "({curr}/{total}): ({n}/{r}) [{m}] {target}".format(
                                 curr=num_curr,
@@ -488,7 +484,13 @@ def main():
                             )
                             print_status(status)
                             succ, conn = request(
-                                target, method, host, agent, args.timeout, args.insecure, args.proxy
+                                target,
+                                method,
+                                auth,
+                                headers,
+                                proxies,
+                                args.timeout,
+                                not args.insecure,
                             )
                             clear_status(status)
                             if succ:

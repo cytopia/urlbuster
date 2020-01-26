@@ -21,12 +21,14 @@ multiple useragents and multiple host headers.
 
 ## Features
 
-* Test with different useragents
-* Test with different host headers
-* Test different request methods
-* Test with and without a trailing slash
-* Specify which http status code yield a successful request
 * Proxy support
+* Basic Auth support
+* Digest Auth support
+* Test different request methods
+* Test different useragents
+* Test different host header values
+* Test with and without a trailing slash
+* Enumerate GET parameter values
 
 
 ## Installation
@@ -36,7 +38,7 @@ pip install urlbuster
 
 ## Usage
 ```
-usage: urlbuster [options] -w <path> URL
+usage: urlbuster [options] -w <word>/-W <path> BASE_URL
        urlbuster --help
        urlbuster --version
 
@@ -46,14 +48,17 @@ Similar to dirb or gobuster, but also allows to iterate over multiple HTTP reque
 multiple useragents and multiple host header values.
 
 positional arguments:
-  URL                   The base URL to scan.
+  BASE_URL              The base URL to scan.
 
 required arguments:
-  -w f, --wordlist f    Path to wordlist to use.
+  -w str, --word str    Word to use.
+  -W f, --wordlist f    Path to wordlist to use.
 
 optional arguments:
   -c str, --code str    Comma separated list of HTTP status code to treat as success.
-                        Default: 200, 201, 202, 203, 204, 205, 206, 207, 208, 226, 300, 301, 302, 303, 304, 305, 306, 307, 308, 403, 407, 411, 426, 429, 500, 505, 511
+                        You can use a '.' (dot) as a wildcard.
+
+                        Default: 2.., 3.., 403, 407, 411, 426, 429, 500, 505, 511
   -m str, --method str  Comma separated list of HTTP methods to test against each request.
                         Note, each supplied method will double the number of requests.
                         Supported methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
@@ -69,8 +74,15 @@ optional arguments:
   -H f, --host-file f   Path to a newline separated file of host header values to send.
                         Note, each supplied host header value will double the number of requests.
   -k, --insecure        Do not verify TLS certificates.
+  -b str, --auth-basic str
+                        Use basic authentication for all requests.
+                        Format: <user>:<pass>
+  -d str, --auth-digest str
+                        Use digest authentication for all requests.
+                        Format: <user>:<pass>
   -p str, --proxy str   Use a proxy for all requests.
-                        Format: http://<host>:<port> or http://<user>:<pass>@<host>:<port>
+                        Format: http://<host>:<port>
+                        Format: http://<user>:<pass>@<host>:<port>
   -t s, --timeout s     Connection timeout in seconds.
                         Default: 5
   -r x, --retries x     Connection retries.
@@ -86,16 +98,15 @@ examples
 ```
 
 
-## Motivation
+## Examples
 
-I came across a couple of websites that behaved differently depending on the specified useragent.
-The feature of iterating over multiple specified useragents and other HTTP header values
-or request methods was lacking from current tools.
+### Different useragents
 
+Some websites behave differently for the same path depending on the specified useragent.
 
 ```bash
 $ urlbuster \
-  -w /usr/share/dirb/wordlists/common.txt \
+  -W /usr/share/dirb/wordlists/common.txt \
   -A /usr/share/urlbuster/examples/useragents-basic.txt \
   -m 'POST,GET,DELETE,PUT,PATCH' \
   http://domain.tld
