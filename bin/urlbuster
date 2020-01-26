@@ -368,7 +368,7 @@ def main():
                     for s, slash in enumerate(slashs):
                         target = url + "/" + word + slash
                         for retry in range(args.retries):
-                            status = "({curr}/{total}): [{m}] {target} ({n}/{r})".format(
+                            status = "({curr}/{total}): ({n}/{r}) [{m}] {target}".format(
                                 curr=num_curr,
                                 total=num_total,
                                 m=method,
