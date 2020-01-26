@@ -369,7 +369,7 @@ def main():
                         if not succ:
                             print_err(
                                 "[ERR] [{m}] {target}: {msg}".format(
-                                    m=method, target=target, msg=conn["exception"]
+                                    m=method, target=target, msg=conn["err"]
                                 )
                             )
                         else:
