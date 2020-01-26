@@ -19,6 +19,15 @@ Similar to [dirb](http://dirb.sourceforge.net/) or [gobuster](https://github.com
 multiple useragents and multiple host headers.
 
 
+## Features
+
+* Test with different useragents
+* Test with different host headers
+* Test different request methods
+* Test with and without a trailing slash
+* Specify which http status code yield a successful request
+
+
 ## Installation
 ```bash
 pip install urlbuster
