@@ -18,7 +18,10 @@ setup(
         "bin/urlbuster"
     ],
     data_files=[
-        ("examples", ["examples/useragents.txt"])
+        ("share/urlbuster/examples", [
+            "examples/useragents-basic.txt",
+            "examples/useragents-sqlinject.txt"
+        ])
     ],
     classifiers=[
         # How mature is this project? Common values are
