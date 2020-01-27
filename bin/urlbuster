@@ -481,7 +481,7 @@ def main():
     words = get_words(args.word, args.wordlist)
 
     if args.new:
-        s = get_session(auth, headers, proxies)
+        sess = get_session(auth, headers, proxies)
 
     # Get base url
     url = args.BASE_URL
@@ -536,8 +536,8 @@ def main():
                             )
                             print_status(status)
                             if args.new:
-                                suc, conn = session_request(
-                                    s, url, method, headers, args.timeout, not args.insecure
+                                succ, conn = session_request(
+                                    sess, url, method, headers, args.timeout, not args.insecure
                                 )
                             else:
                                 succ, conn = request(
