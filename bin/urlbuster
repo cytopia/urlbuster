@@ -523,6 +523,20 @@ def print_banner(
     print()
 
 
+def print_round_header(headers):
+    """Print round header with http headers."""
+    max_length = 80
+    key_length = len(max(headers.keys(), key=len))
+    print("-" * max_length)
+    for key in headers:
+        padding = key_length - len(key)
+        value = headers[key]
+        while len(value) > max_length - len(key) - padding - 2:
+            value = value[:-1]
+        print("{key}: {pad}{val}".format(key=key, pad=" "*padding, val=value))
+    print()
+
+
 def main():
     """Start the program."""
     args = get_args()
@@ -572,10 +586,7 @@ def main():
             if agent is not None:
                 headers["User-Agent"] = agent
 
-            print("-" * 80)
-            for key in headers:
-                print("{key}: {val}".format(key=key, val=headers[key]))
-            print()
+            print_round_header(headers)
 
             for m, method in enumerate(methods):
                 for w, word in enumerate(words):
