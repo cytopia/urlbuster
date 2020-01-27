@@ -507,9 +507,9 @@ def print_banner(
     if proxy is not None:
         print("            Proxy:          {proxy}".format(proxy=proxy))
     if basic is not None:
-        print("            Authentication: {auth}".format(auth=basic))
+        print("            Basisc auth:    {auth}".format(auth=basic))
     if digest is not None:
-        print("            Authentication: {auth}".format(auth=digest))
+        print("            Digest auth:    {auth}".format(auth=digest))
     print()
 
     print("      MUTATIONS")
