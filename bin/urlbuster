@@ -537,7 +537,7 @@ def main():
                             print_status(status)
                             if args.new:
                                 succ, conn = session_request(
-                                    sess, url, method, headers, args.timeout, not args.insecure
+                                    sess, target, method, headers, args.timeout, not args.insecure
                                 )
                             else:
                                 succ, conn = request(
