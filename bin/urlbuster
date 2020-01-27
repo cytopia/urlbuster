@@ -14,7 +14,7 @@ import requests
 # GLOBALS
 # -------------------------------------------------------------------------------------------------
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 DEFAULT_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.123 Safari/537.36"  # noqa: E501
 DEFAULT_SLASH = "no"
@@ -468,7 +468,20 @@ multiple useragents and multiple host header values.
 
 
 def print_banner(
-    base_url, timeout, retries, codes, agents, hosts, methods, words, slash, headers, total
+    base_url,
+    timeout,
+    retries,
+    codes,
+    agents,
+    hosts,
+    methods,
+    words,
+    slash,
+    headers,
+    basic,
+    digest,
+    proxy,
+    total,
 ):
     """Print initial banner."""
     print(
@@ -491,11 +504,12 @@ def print_banner(
     print("            Timeout:        {timeout}s".format(timeout=timeout))
     print("            Retries:        {retries}".format(retries=retries))
     print("            Valid codes:    {codes}".format(codes=", ".join(codes)))
-    print()
-
-    print("      DEFAULT HEADERS")
-    for key in headers:
-        print("            {key}: {val}".format(key=key, val=headers[key]))
+    if proxy is not None:
+        print("            Proxy:          {proxy}".format(proxy=proxy))
+    if basic is not None:
+        print("            Authentication: {auth}".format(auth=basic))
+    if digest is not None:
+        print("            Authentication: {auth}".format(auth=digest))
     print()
 
     print("      MUTATIONS")
@@ -543,25 +557,25 @@ def main():
         words,
         args.slash,
         headers,
+        args.auth_basic,
+        args.auth_digest,
+        args.proxy,
         num_total,
     )
 
     num_curr = 1
     for a, agent in enumerate(agents):
-        print("#" * 80)
-        print("User-Agent: %s" % agent)
-        print("#" * 80)
         for h, host in enumerate([None] if len(hosts) == 0 else hosts):
-            if len(hosts) > 0:
-                print("-" * 60)
-                print("Host: %s" % host)
-                print("-" * 60)
-
             # Enrich headers
             if host is not None:
                 headers["Host"] = host
             if agent is not None:
                 headers["User-Agent"] = agent
+
+            print("-" * 80)
+            for key in headers:
+                print("{key}: {val}".format(key=key, val=headers[key]))
+            print()
 
             for m, method in enumerate(methods):
                 for w, word in enumerate(words):
