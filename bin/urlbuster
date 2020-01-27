@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""Enumerate SMTP users on slow SMTP servers."""
+"""URL bruteforcer to locate existing and/or hidden files or directories.."""
 
 from __future__ import print_function
 
 import os
-import sys
 import re
+import sys
 import argparse
 import requests
 
