@@ -24,6 +24,7 @@ multiple useragents and multiple host headers.
 * Proxy support
 * Basic Auth support
 * Digest Auth support
+* Persistent HTTP connection
 * Test different request methods
 * Test different useragents
 * Test different host header values
@@ -73,6 +74,8 @@ optional arguments:
   -h str, --host str    Host header value to send.
   -H f, --host-file f   Path to a newline separated file of host header values to send.
                         Note, each supplied host header value will double the number of requests.
+  -n, --new             Use a new connection for every request.
+                        If not specified persistent http connection will be used for all requests.
   -k, --insecure        Do not verify TLS certificates.
   -b str, --auth-basic str
                         Use basic authentication for all requests.
@@ -109,7 +112,7 @@ $ urlbuster \
   -W /usr/share/dirb/wordlists/common.txt \
   -A /usr/share/urlbuster/examples/useragents-basic.txt \
   -m 'POST,GET,DELETE,PUT,PATCH' \
-  http://domain.tld
+  http://domain.tld/
 
 Base URL:       http://domain.tld
 Timeout:        10s

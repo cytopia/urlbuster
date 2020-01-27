@@ -136,7 +136,7 @@ def get_proxies(proxy):
             "http": proxy,
             "https": proxy,
         }
-    return {}
+    return None
 
 
 def get_auth_method(auth_basic, auth_digest):
@@ -145,6 +145,7 @@ def get_auth_method(auth_basic, auth_digest):
         return requests.auth.HTTPBasicAuth(auth_basic[0], auth_basic[1])
     if auth_digest is not None:
         return requests.auth.HTTPDigestAuth(auth_digest[0], auth_digest[1])
+    return None
 
 
 def get_words(word, wordlist):
@@ -157,6 +158,45 @@ def get_words(word, wordlist):
 # -------------------------------------------------------------------------------------------------
 # URL FUNCTIONS
 # -------------------------------------------------------------------------------------------------
+
+
+def get_session(auth, headers, proxies):
+    """Return session object for persistent connection."""
+    s = requests.Session()
+    if auth is not None:
+        s.auth = auth
+    if proxies is not None:
+        s.proxies = proxies
+    s.headers.update(headers)
+
+    return s
+
+
+def session_request(s, url, method, headers, timeout, verify):
+    """Connect to a persistent http connection."""
+    # s.(get|post|delete|...)
+    fn = getattr(s, method.lower())
+    try:
+        return (
+            True,
+            fn(
+                url,
+                data={},
+                allow_redirects=False,
+                headers=headers,
+                timeout=timeout,
+                verify=verify,
+            ),
+        )
+    except requests.exceptions.Timeout as err:
+        # Maybe set up for a retry, or continue in a retry loop
+        return False, {"type": "timeout", "err": err}
+    except requests.exceptions.TooManyRedirects as err:
+        # Tell the user their URL was bad and try a different one
+        return False, {"type": "toomanyredirects", "err": err}
+    except requests.exceptions.RequestException as err:
+        # catastrophic error. bail.
+        return False, {"type": "exception", "err": err}
 
 
 def request(url, method, auth, headers, proxies, timeout, verify):
@@ -352,6 +392,15 @@ multiple useragents and multiple host header values.
         + "Note, each supplied host header value will double the number of requests.",
     )
     optional.add_argument(
+        "-n",
+        "--new",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Use a new connection for every request.\n"
+        + "If not specified persistent http connection will be used for all requests.",
+    ),
+    optional.add_argument(
         "-k",
         "--insecure",
         required=False,
@@ -431,6 +480,9 @@ def main():
     headers = get_headers([])
     words = get_words(args.word, args.wordlist)
 
+    if args.new:
+        s = get_session(auth, headers, proxies)
+
     # Get base url
     url = args.BASE_URL
 
@@ -483,15 +535,20 @@ def main():
                                 r=args.retries,
                             )
                             print_status(status)
-                            succ, conn = request(
-                                target,
-                                method,
-                                auth,
-                                headers,
-                                proxies,
-                                args.timeout,
-                                not args.insecure,
-                            )
+                            if args.new:
+                                suc, conn = session_request(
+                                    s, url, method, headers, args.timeout, not args.insecure
+                                )
+                            else:
+                                succ, conn = request(
+                                    target,
+                                    method,
+                                    auth,
+                                    headers,
+                                    proxies,
+                                    args.timeout,
+                                    not args.insecure,
+                                )
                             clear_status(status)
                             if succ:
                                 break
