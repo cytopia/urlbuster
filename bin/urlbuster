@@ -480,7 +480,7 @@ def main():
     headers = get_headers([])
     words = get_words(args.word, args.wordlist)
 
-    if args.new:
+    if not args.new:
         sess = get_session(auth, headers, proxies)
 
     # Get base url
@@ -535,7 +535,7 @@ def main():
                                 r=args.retries,
                             )
                             print_status(status)
-                            if args.new:
+                            if not args.new:
                                 succ, conn = session_request(
                                     sess, target, method, headers, args.timeout, not args.insecure
                                 )
