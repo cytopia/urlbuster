@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-"""Enumerate SMTP users on slow SMTP servers."""
+"""URL bruteforcer to locate existing and/or hidden files or directories.."""
 
 from __future__ import print_function
 
 import os
+import re
 import sys
 import argparse
 import requests
@@ -13,18 +14,29 @@ import requests
 # GLOBALS
 # -------------------------------------------------------------------------------------------------
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
-DEFAULT_USERAGENT = "urlbuster"
+DEFAULT_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.123 Safari/537.36"  # noqa: E501
 DEFAULT_SLASH = "no"
-SUPPORTED_SLASHS = {
+SUPPORTED_SLASHES = {
     "no": [""],
     "yes": ["/"],
     "both": ["", "/"],
 }
 DEFAULT_METHOD = "GET"
 SUPPORTED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
-DEFAULT_CODES = ["200", "204", "301", "302", "307", "403"]
+DEFAULT_CODES = [
+    "2..",
+    "3..",
+    "403",
+    "407",
+    "411",
+    "426",
+    "429",
+    "500",
+    "505",
+    "511",
+]
 DEFAULT_TIMEOUT = 5
 DEFAULT_RETRIES = 3
 
@@ -72,56 +84,111 @@ def read_file(filepath):
 
 
 # -------------------------------------------------------------------------------------------------
+# RETRIEVE URL PARAM FUNCTIONS
+# -------------------------------------------------------------------------------------------------
+
+
+def get_useragents(agent, agent_file):
+    """Get list of useragent strings."""
+    if agent is not None:
+        return [agent]
+    if agent_file is not None:
+        return read_file(agent_file)
+    return [DEFAULT_USERAGENT]
+
+
+def get_host_header_values(host, host_file):
+    """Get list of host header values."""
+    if host is not None:
+        return [host]
+    if host_file is not None:
+        return read_file(host_file)
+    return []
+
+
+def get_http_methods(method):
+    """Get list of HTTP methods."""
+    if method is not None:
+        return method.split(",")
+    return [DEFAULT_METHOD]
+
+
+def get_slash_values(slash):
+    """Get list with empty element and or slash element."""
+    if slash is not None:
+        return SUPPORTED_SLASHES[slash]
+    return SUPPORTED_SLASHES[DEFAULT_SLASH]
+
+
+def get_headers(custom_headers):
+    """Retrieve HTTP headers."""
+    headers = requests.utils.default_headers()
+    del headers["User-Agent"]
+    for header in custom_headers:
+        key, val = header.split(":")
+        headers[key] = val
+    return headers
+
+
+def get_proxies(proxy):
+    """Retrieve proxy dict to be used for requests."""
+    if proxy is not None:
+        return {
+            "http": proxy,
+            "https": proxy,
+        }
+    return None
+
+
+def get_auth_method(auth_basic, auth_digest):
+    """Return authentication object."""
+    if auth_basic is not None:
+        return requests.auth.HTTPBasicAuth(auth_basic[0], auth_basic[1])
+    if auth_digest is not None:
+        return requests.auth.HTTPDigestAuth(auth_digest[0], auth_digest[1])
+    return None
+
+
+def get_words(word, wordlist):
+    """Return list of words."""
+    if word is not None:
+        return [word]
+    return read_file(wordlist)
+
+
+# -------------------------------------------------------------------------------------------------
 # URL FUNCTIONS
 # -------------------------------------------------------------------------------------------------
 
 
-def request(url, method, host, useragent, timeout):
-    """Open an http request."""
-    # Headers
-    headers = requests.utils.default_headers()
-    if host is not None:
-        headers["Host"] = host
-    if useragent is not None:
-        headers["User-Agent"] = useragent
-    # Methods
+def get_session(auth, headers, proxies):
+    """Return session object for persistent connection."""
+    s = requests.Session()
+    if auth is not None:
+        s.auth = auth
+    if proxies is not None:
+        s.proxies = proxies
+    s.headers.update(headers)
+
+    return s
+
+
+def session_request(s, url, method, headers, timeout, verify):
+    """Connect to a persistent http connection."""
+    # s.(get|post|delete|...)
+    fn = getattr(s, method.lower())
     try:
-        if method == "GET":
-            return True, requests.get(url, headers=headers, allow_redirects=False, timeout=timeout)
-        elif method == "POST":
-            return (
-                True,
-                requests.post(
-                    url, headers=headers, data={}, allow_redirects=False, timeout=timeout
-                ),
-            )
-        elif method == "PUT":
-            return (
-                True,
-                requests.put(url, headers=headers, data={}, allow_redirects=False, timeout=timeout),
-            )
-        elif method == "DELETE":
-            return (
-                True,
-                requests.delete(
-                    url, headers=headers, data={}, allow_redirects=False, timeout=timeout
-                ),
-            )
-        elif method == "PATCH":
-            return (
-                True,
-                requests.patch(url, headers=headers, allow_redirects=False, timeout=timeout),
-            )
-        elif method == "OPTIONS":
-            return (
-                True,
-                requests.options(url, headers=headers, allow_redirects=False, timeout=timeout),
-            )
-        elif method == "HEAD":
-            return (
-                True,
-                requests.head(url, headers=headers, allow_redirects=False, timeout=timeout),
-            )
+        return (
+            True,
+            fn(
+                url,
+                data={},
+                allow_redirects=False,
+                headers=headers,
+                timeout=timeout,
+                verify=verify,
+            ),
+        )
     except requests.exceptions.Timeout as err:
         # Maybe set up for a retry, or continue in a retry loop
         return False, {"type": "timeout", "err": err}
@@ -133,6 +200,44 @@ def request(url, method, host, useragent, timeout):
         return False, {"type": "exception", "err": err}
 
 
+def request(url, method, auth, headers, proxies, timeout, verify):
+    """Open an http request."""
+    # requests.(get|post|delete|...)
+    fn = getattr(requests, method.lower())
+    try:
+        return (
+            True,
+            fn(
+                url,
+                data={},
+                allow_redirects=False,
+                auth=auth,
+                headers=headers,
+                proxies=proxies,
+                timeout=timeout,
+                verify=verify,
+            ),
+        )
+    except requests.exceptions.Timeout as err:
+        # Maybe set up for a retry, or continue in a retry loop
+        return False, {"type": "timeout", "err": err}
+    except requests.exceptions.TooManyRedirects as err:
+        # Tell the user their URL was bad and try a different one
+        return False, {"type": "toomanyredirects", "err": err}
+    except requests.exceptions.RequestException as err:
+        # catastrophic error. bail.
+        return False, {"type": "exception", "err": err}
+
+
+def check_code(code, codes):
+    """Check if http status code is a successful code."""
+    for reg in codes:
+        if re.match(reg, str(code)):
+            return True
+
+    return False
+
+
 # -------------------------------------------------------------------------------------------------
 # ARGS
 # -------------------------------------------------------------------------------------------------
@@ -140,8 +245,9 @@ def request(url, method, host, useragent, timeout):
 
 def _args_check_codes(value):
     """Check argument for valid status codes."""
-    strval = value
+    strval = str(value).replace(" ", "")
     for code in strval.split(","):
+        code = code.replace(".", "1")
         try:
             code = int(code)
         except ValueError:
@@ -151,9 +257,18 @@ def _args_check_codes(value):
     return strval
 
 
+def _args_check_auth(value):
+    """Check argument for valid methods."""
+    strval = str(value)
+    auth = strval.split(":")
+    if len(auth) != 2:
+        raise argparse.ArgumentTypeError('Invalid auth value "%s"')
+    return strval
+
+
 def _args_check_method(value):
     """Check argument for valid methods."""
-    strval = value
+    strval = str(value).replace(" ", "")
     for method in strval.split(","):
         if method not in SUPPORTED_METHODS:
             raise argparse.ArgumentTypeError(
@@ -164,17 +279,17 @@ def _args_check_method(value):
 
 def _args_check_slash(value):
     """Check argument for valid slash value."""
-    strval = value
-    if strval not in SUPPORTED_SLASHS.keys():
+    strval = str(value)
+    if strval not in SUPPORTED_SLASHES.keys():
         raise argparse.ArgumentTypeError(
-            'Invalid slash value "%s". Supported: %s' % (value, ", ".join(SUPPORTED_SLASHS.keys()))
+            'Invalid slash value "%s". Supported: %s' % (value, ", ".join(SUPPORTED_SLASHES.keys()))
         )
     return strval
 
 
 def _args_check_file(value):
     """Check argument for existing file."""
-    strval = value
+    strval = str(value)
     if not os.path.isfile(strval):
         raise argparse.ArgumentTypeError('File "%s" not found.' % value)
     return strval
@@ -185,25 +300,29 @@ def get_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawTextHelpFormatter,
         add_help=False,
-        usage="""%(prog)s [options] -w <path> URL
+        usage="""%(prog)s [options] -w <word>/-W <path> BASE_URL
        %(prog)s --help
        %(prog)s --version
 """,
         description="""URL bruteforcer to locate existing and/or hidden files or directories.
 
 Similar to dirb or gobuster, but also allows to iterate over multiple HTTP request methods,
-multiple useragents and multiple host headers.
+multiple useragents and multiple host header values.
 """,
+        epilog="""examples
+
+  %(prog)s -w /path/to/words http://example.com
+  %(prog)s -w /path/to/words http://example.com:8000
+  %(prog)s -k -w /path/to/words https://example.com:10000""",
     )
     required = parser.add_argument_group("required arguments")
     optional = parser.add_argument_group("optional arguments")
-    required.add_argument(
-        "-w",
-        "--wordlist",
-        metavar="f",
-        required=True,
-        type=_args_check_file,
-        help="The path of the wordlist.",
+    word = required.add_mutually_exclusive_group(required=True)
+    word.add_argument(
+        "-w", "--word", metavar="str", type=str, help="Word to use.",
+    )
+    word.add_argument(
+        "-W", "--wordlist", metavar="f", type=_args_check_file, help="Path to wordlist to use.",
     )
     optional.add_argument(
         "-c",
@@ -212,7 +331,8 @@ multiple useragents and multiple host headers.
         required=False,
         default=",".join(DEFAULT_CODES),
         type=_args_check_codes,
-        help="Comma separated list of HTTP status code to treat as success."
+        help="Comma separated list of HTTP status code to treat as success.\n"
+        + "You can use a '.' (dot) as a wildcard.\n"
         + "\nDefault: "
         + ", ".join(DEFAULT_CODES),
     )
@@ -223,10 +343,12 @@ multiple useragents and multiple host headers.
         required=False,
         default=DEFAULT_METHOD,
         type=_args_check_method,
-        help="Comma separated list of HTTP methods to test for each request.\nSupported methods: "
+        help="Comma separated list of HTTP methods to test against each request.\n"
         + "Note, each supplied method will double the number of requests.\n"
+        + "Supported methods: "
         + ", ".join(SUPPORTED_METHODS)
-        + "\nDefault: "
+        + "\n"
+        + "Default: "
         + DEFAULT_METHOD,
     )
     optional.add_argument(
@@ -238,14 +360,15 @@ multiple useragents and multiple host headers.
         type=_args_check_slash,
         help="Append or omit a trailing slash to URLs to test.\n"
         + "Options: "
-        + ", ".join(SUPPORTED_SLASHS.keys())
-        + ".Note using 'both' will double the number of requests.\n"
+        + ", ".join(SUPPORTED_SLASHES.keys())
+        + "\n"
+        + "Note, using 'both' will double the number of requests.\n"
         + "Default: "
         + DEFAULT_SLASH,
     )
     agent = optional.add_mutually_exclusive_group(required=False)
     agent.add_argument(
-        "-a", "--agent", metavar="str", required=False, type=str, help="Useragent header to send."
+        "-a", "--agent", metavar="str", required=False, type=str, help="Useragent string to send."
     )
     agent.add_argument(
         "-A",
@@ -253,12 +376,12 @@ multiple useragents and multiple host headers.
         metavar="f",
         required=False,
         type=_args_check_file,
-        help="Newline separated list of useragents to use.\n"
+        help="Path to a newline separated file of useragents to use.\n"
         + "Note, each supplied useragent will double the number of requests.",
     )
     host = optional.add_mutually_exclusive_group(required=False)
     host.add_argument(
-        "-h", "--host", metavar="str", required=False, type=str, help="Host header to send."
+        "-h", "--host", metavar="str", required=False, type=str, help="Host header value to send."
     )
     host.add_argument(
         "-H",
@@ -266,9 +389,50 @@ multiple useragents and multiple host headers.
         metavar="f",
         required=False,
         type=_args_check_file,
-        help="Newline separated list of host headers to send.\n"
-        + "Note, each supplied host header will double the number of requests.",
+        help="Path to a newline separated file of host header values to send.\n"
+        + "Note, each supplied host header value will double the number of requests.",
     )
+    optional.add_argument(
+        "-n",
+        "--new",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Use a new connection for every request.\n"
+        + "If not specified persistent http connection will be used for all requests.",
+    ),
+    optional.add_argument(
+        "-k",
+        "--insecure",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Do not verify TLS certificates.",
+    ),
+    optional.add_argument(
+        "-b",
+        "--auth-basic",
+        metavar="str",
+        required=False,
+        type=_args_check_auth,
+        help="Use basic authentication for all requests.\n" + "Format: <user>:<pass>",
+    ),
+    auth = optional.add_mutually_exclusive_group(required=False)
+    auth.add_argument(
+        "-d",
+        "--auth-digest",
+        metavar="str",
+        type=_args_check_auth,
+        help="Use digest authentication for all requests.\n" + "Format: <user>:<pass>",
+    ),
+    auth.add_argument(
+        "-p",
+        "--proxy",
+        metavar="str",
+        type=str,
+        help="Use a proxy for all requests.\n"
+        + "Format: http://<host>:<port>\nFormat: http://<user>:<pass>@<host>:<port>",
+    ),
     optional.add_argument(
         "-t",
         "--timeout",
@@ -294,7 +458,7 @@ multiple useragents and multiple host headers.
         version="%(prog)s " + VERSION + " by cytopia",
         help="Show version information",
     )
-    parser.add_argument("URL", type=str, help="The base URL to scan.")
+    parser.add_argument("BASE_URL", type=str, help="The base URL to scan.")
     return parser.parse_args()
 
 
@@ -303,72 +467,106 @@ multiple useragents and multiple host headers.
 # -------------------------------------------------------------------------------------------------
 
 
+def print_banner(
+    base_url, timeout, retries, codes, agents, hosts, methods, words, slash, headers, total
+):
+    """Print initial banner."""
+    print(
+        """
+   db    db d8888b. db      d8888b. db    db .d8888. d888888b d88888b d8888b.
+   88    88 88  `8D 88      88  `8D 88    88 88'  YP `~~88~~' 88'     88  `8D
+   88    88 88oobY' 88      88oooY' 88    88 `8bo.      88    88ooooo 88oobY'
+   88    88 88`8b   88      88~~~b. 88    88   `Y8b.    88    88~~~~~ 88`8b
+   88b  d88 88 `88. 88booo. 88   8D 88b  d88 db   8D    88    88.     88 `88.
+   ~Y8888P' 88   YD Y88888P Y8888P' ~Y8888P' `8888Y'    YP    Y88888P 88   YD
+
+                               {version} by cytopia
+""".format(
+            version=VERSION
+        )
+    )
+
+    print("      SETTINGS")
+    print("            Base URL:       {url}".format(url=base_url))
+    print("            Timeout:        {timeout}s".format(timeout=timeout))
+    print("            Retries:        {retries}".format(retries=retries))
+    print("            Valid codes:    {codes}".format(codes=", ".join(codes)))
+    print()
+
+    print("      DEFAULT HEADERS")
+    for key in headers:
+        print("            {key}: {val}".format(key=key, val=headers[key]))
+    print()
+
+    print("      MUTATIONS")
+    print("            Useragents:     {num}".format(num=len(agents)))
+    print("            Host headers:   {num}".format(num=len(hosts)))
+    print("            Methods:        {num} ({m})".format(num=len(methods), m=", ".join(methods)))
+    print("            Add slashes:    {slash}".format(slash=slash))
+    print("            Words:          {num}".format(num=len(words)))
+    print()
+    print("      TOTAL REQUESTS: {num}".format(num=(total)))
+    print()
+
+
 def main():
     """Start the program."""
     args = get_args()
+    agents = get_useragents(args.agent, args.agent_file)
+    hosts = get_host_header_values(args.host, args.host_file)
+    methods = get_http_methods(args.method)
+    slashes = get_slash_values(args.slash)
+    proxies = get_proxies(args.proxy)
+    auth = get_auth_method(args.auth_basic, args.auth_digest)
+    headers = get_headers([])
+    words = get_words(args.word, args.wordlist)
 
-    # Get list of useragents
-    agents = [DEFAULT_USERAGENT]
-    if args.agent is not None:
-        agents = [args.agent]
-    elif args.agent_file is not None:
-        agents = read_file(args.agent_file)
-
-    # Get list of host headers
-    hosts = []
-    if args.host is not None:
-        hosts = [args.host]
-    elif args.host_file is not None:
-        hosts = read_file(args.host_file)
-
-    # Get list of methods
-    methods = [DEFAULT_METHOD]
-    if args.method is not None:
-        methods = args.method.split(",")
-
-    # Get list of slashes
-    slashs = SUPPORTED_SLASHS[DEFAULT_SLASH]
-    if args.slash is not None:
-        slashs = SUPPORTED_SLASHS[args.slash]
-
-    # Get words
-    words = read_file(args.wordlist)
+    if not args.new:
+        sess = get_session(auth, headers, proxies)
 
     # Get base url
-    url = args.URL.rstrip("/")
+    url = args.BASE_URL
 
     # Get http status codes to treat as success
     codes = args.code.split(",")
 
     num_hosts = 1 if len(hosts) == 0 else len(hosts)
-    num_total = len(agents) * len(methods) * num_hosts * len(words) * len(slashs)
-    print("Base URL:       {url}".format(url=url))
-    print("Timeout:        {timeout}s".format(timeout=args.timeout))
-    print("Retries:        {retries}".format(retries=args.retries))
-    print("Valid codes:    {codes}".format(codes=", ".join(codes)))
-    print("Useragents:     {num}".format(num=len(agents)))
-    print("Host headers:   {num}".format(num=len(hosts)))
-    print("Methods:        {num} ({m})".format(num=len(methods), m=", ".join(methods)))
-    print("Words:          {num}".format(num=len(words)))
-    print("Slashs:         {slash}".format(slash=args.slash))
-    print()
-    print("Total requests: {num}".format(num=(num_total)))
-    print()
+    num_total = len(agents) * len(methods) * num_hosts * len(words) * len(slashes)
+    print_banner(
+        url,
+        args.timeout,
+        args.retries,
+        codes,
+        agents,
+        hosts,
+        methods,
+        words,
+        args.slash,
+        headers,
+        num_total,
+    )
 
     num_curr = 1
     for a, agent in enumerate(agents):
-        print("#" * 100)
-        print("[HEADER] User-Agent: %s" % agent)
-        print("#" * 100)
+        print("#" * 80)
+        print("User-Agent: %s" % agent)
+        print("#" * 80)
         for h, host in enumerate([None] if len(hosts) == 0 else hosts):
             if len(hosts) > 0:
-                print("-" * 80)
-                print("[HEADER] Host: %s" % host)
-                print("-" * 80)
+                print("-" * 60)
+                print("Host: %s" % host)
+                print("-" * 60)
+
+            # Enrich headers
+            if host is not None:
+                headers["Host"] = host
+            if agent is not None:
+                headers["User-Agent"] = agent
+
             for m, method in enumerate(methods):
                 for w, word in enumerate(words):
-                    for s, slash in enumerate(slashs):
-                        target = url + "/" + word + slash
+                    for s, slash in enumerate(slashes):
+                        target = url + word + slash
                         for retry in range(args.retries):
                             status = "({curr}/{total}): ({n}/{r}) [{m}] {target}".format(
                                 curr=num_curr,
@@ -379,7 +577,20 @@ def main():
                                 r=args.retries,
                             )
                             print_status(status)
-                            succ, conn = request(target, method, host, agent, args.timeout)
+                            if not args.new:
+                                succ, conn = session_request(
+                                    sess, target, method, headers, args.timeout, not args.insecure
+                                )
+                            else:
+                                succ, conn = request(
+                                    target,
+                                    method,
+                                    auth,
+                                    headers,
+                                    proxies,
+                                    args.timeout,
+                                    not args.insecure,
+                                )
                             clear_status(status)
                             if succ:
                                 break
@@ -391,7 +602,7 @@ def main():
                             )
                         else:
                             code = conn.status_code
-                            if str(code) in codes:
+                            if check_code(code, codes):
                                 print_succ(
                                     "[{code}] [{m}] {target}".format(
                                         code=code, m=method, target=target
