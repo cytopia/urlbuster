@@ -18,7 +18,7 @@ VERSION = "0.3.0"
 
 DEFAULT_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.123 Safari/537.36"  # noqa: E501
 DEFAULT_SLASH = "no"
-SUPPORTED_SLASHS = {
+SUPPORTED_SLASHES = {
     "no": [""],
     "yes": ["/"],
     "both": ["", "/"],
@@ -116,13 +116,14 @@ def get_http_methods(method):
 def get_slash_values(slash):
     """Get list with empty element and or slash element."""
     if slash is not None:
-        return SUPPORTED_SLASHS[slash]
-    return SUPPORTED_SLASHS[DEFAULT_SLASH]
+        return SUPPORTED_SLASHES[slash]
+    return SUPPORTED_SLASHES[DEFAULT_SLASH]
 
 
 def get_headers(custom_headers):
     """Retrieve HTTP headers."""
     headers = requests.utils.default_headers()
+    del headers["User-Agent"]
     for header in custom_headers:
         key, val = header.split(":")
         headers[key] = val
@@ -244,7 +245,7 @@ def check_code(code, codes):
 
 def _args_check_codes(value):
     """Check argument for valid status codes."""
-    strval = str(value)
+    strval = str(value).replace(" ", "")
     for code in strval.split(","):
         code = code.replace(".", "1")
         try:
@@ -267,7 +268,7 @@ def _args_check_auth(value):
 
 def _args_check_method(value):
     """Check argument for valid methods."""
-    strval = str(value)
+    strval = str(value).replace(" ", "")
     for method in strval.split(","):
         if method not in SUPPORTED_METHODS:
             raise argparse.ArgumentTypeError(
@@ -279,9 +280,9 @@ def _args_check_method(value):
 def _args_check_slash(value):
     """Check argument for valid slash value."""
     strval = str(value)
-    if strval not in SUPPORTED_SLASHS.keys():
+    if strval not in SUPPORTED_SLASHES.keys():
         raise argparse.ArgumentTypeError(
-            'Invalid slash value "%s". Supported: %s' % (value, ", ".join(SUPPORTED_SLASHS.keys()))
+            'Invalid slash value "%s". Supported: %s' % (value, ", ".join(SUPPORTED_SLASHES.keys()))
         )
     return strval
 
@@ -359,7 +360,7 @@ multiple useragents and multiple host header values.
         type=_args_check_slash,
         help="Append or omit a trailing slash to URLs to test.\n"
         + "Options: "
-        + ", ".join(SUPPORTED_SLASHS.keys())
+        + ", ".join(SUPPORTED_SLASHES.keys())
         + "\n"
         + "Note, using 'both' will double the number of requests.\n"
         + "Default: "
@@ -466,15 +467,55 @@ multiple useragents and multiple host header values.
 # -------------------------------------------------------------------------------------------------
 
 
+def print_banner(
+    base_url, timeout, retries, codes, agents, hosts, methods, words, slash, headers, total
+):
+    """Print initial banner."""
+    print(
+        """
+   db    db d8888b. db      d8888b. db    db .d8888. d888888b d88888b d8888b.
+   88    88 88  `8D 88      88  `8D 88    88 88'  YP `~~88~~' 88'     88  `8D
+   88    88 88oobY' 88      88oooY' 88    88 `8bo.      88    88ooooo 88oobY'
+   88    88 88`8b   88      88~~~b. 88    88   `Y8b.    88    88~~~~~ 88`8b
+   88b  d88 88 `88. 88booo. 88   8D 88b  d88 db   8D    88    88.     88 `88.
+   ~Y8888P' 88   YD Y88888P Y8888P' ~Y8888P' `8888Y'    YP    Y88888P 88   YD
+
+                               {version} by cytopia
+""".format(
+            version=VERSION
+        )
+    )
+
+    print("      SETTINGS")
+    print("            Base URL:       {url}".format(url=base_url))
+    print("            Timeout:        {timeout}s".format(timeout=timeout))
+    print("            Retries:        {retries}".format(retries=retries))
+    print("            Valid codes:    {codes}".format(codes=", ".join(codes)))
+    print()
+
+    print("      DEFAULT HEADERS")
+    for key in headers:
+        print("            {key}: {val}".format(key=key, val=headers[key]))
+    print()
+
+    print("      MUTATIONS")
+    print("            Useragents:     {num}".format(num=len(agents)))
+    print("            Host headers:   {num}".format(num=len(hosts)))
+    print("            Methods:        {num} ({m})".format(num=len(methods), m=", ".join(methods)))
+    print("            Add slashes:    {slash}".format(slash=slash))
+    print("            Words:          {num}".format(num=len(words)))
+    print()
+    print("      TOTAL REQUESTS: {num}".format(num=(total)))
+    print()
+
+
 def main():
     """Start the program."""
     args = get_args()
-    print(args)
-
     agents = get_useragents(args.agent, args.agent_file)
     hosts = get_host_header_values(args.host, args.host_file)
     methods = get_http_methods(args.method)
-    slashs = get_slash_values(args.slash)
+    slashes = get_slash_values(args.slash)
     proxies = get_proxies(args.proxy)
     auth = get_auth_method(args.auth_basic, args.auth_digest)
     headers = get_headers([])
@@ -490,30 +531,31 @@ def main():
     codes = args.code.split(",")
 
     num_hosts = 1 if len(hosts) == 0 else len(hosts)
-    num_total = len(agents) * len(methods) * num_hosts * len(words) * len(slashs)
-    print("Base URL:       {url}".format(url=url))
-    print("Timeout:        {timeout}s".format(timeout=args.timeout))
-    print("Retries:        {retries}".format(retries=args.retries))
-    print("Valid codes:    {codes}".format(codes=", ".join(codes)))
-    print("Useragents:     {num}".format(num=len(agents)))
-    print("Host headers:   {num}".format(num=len(hosts)))
-    print("Methods:        {num} ({m})".format(num=len(methods), m=", ".join(methods)))
-    print("Words:          {num}".format(num=len(words)))
-    print("Slashs:         {slash}".format(slash=args.slash))
-    print()
-    print("Total requests: {num}".format(num=(num_total)))
-    print()
+    num_total = len(agents) * len(methods) * num_hosts * len(words) * len(slashes)
+    print_banner(
+        url,
+        args.timeout,
+        args.retries,
+        codes,
+        agents,
+        hosts,
+        methods,
+        words,
+        args.slash,
+        headers,
+        num_total,
+    )
 
     num_curr = 1
     for a, agent in enumerate(agents):
-        print("#" * 100)
-        print("[HEADER] User-Agent: %s" % agent)
-        print("#" * 100)
+        print("#" * 80)
+        print("User-Agent: %s" % agent)
+        print("#" * 80)
         for h, host in enumerate([None] if len(hosts) == 0 else hosts):
             if len(hosts) > 0:
-                print("-" * 80)
-                print("[HEADER] Host: %s" % host)
-                print("-" * 80)
+                print("-" * 60)
+                print("Host: %s" % host)
+                print("-" * 60)
 
             # Enrich headers
             if host is not None:
@@ -523,7 +565,7 @@ def main():
 
             for m, method in enumerate(methods):
                 for w, word in enumerate(words):
-                    for s, slash in enumerate(slashs):
+                    for s, slash in enumerate(slashes):
                         target = url + word + slash
                         for retry in range(args.retries):
                             status = "({curr}/{total}): ({n}/{r}) [{m}] {target}".format(

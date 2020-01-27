@@ -26,7 +26,7 @@ multiple useragents and multiple host headers.
 * Digest Auth support
 * Persistent HTTP connection
 * Test different request methods
-* Test different useragents
+* Test different user agents
 * Test different host header values
 * Test with and without a trailing slash
 * Enumerate GET parameter values
@@ -112,28 +112,47 @@ $ urlbuster \
   -W /usr/share/dirb/wordlists/common.txt \
   -A /usr/share/urlbuster/examples/useragents-basic.txt \
   -m 'POST,GET,DELETE,PUT,PATCH' \
-  http://domain.tld/
+  http://www.domain.tld/
+```
 
-Base URL:       http://domain.tld
-Timeout:        10s
-Retries:        3
-Valid codes:    200, 204, 301, 302, 307, 403
-Useragents:     2
-Host headers:   0
-Methods:        5 (POST, GET, DELETE, PUT, PATCH)
-Words:          4614
-Slashs:         no
+```
+   db    db d8888b. db      d8888b. db    db .d8888. d888888b d88888b d8888b.
+   88    88 88  `8D 88      88  `8D 88    88 88'  YP `~~88~~' 88'     88  `8D
+   88    88 88oobY' 88      88oooY' 88    88 `8bo.      88    88ooooo 88oobY'
+   88    88 88`8b   88      88~~~b. 88    88   `Y8b.    88    88~~~~~ 88`8b
+   88b  d88 88 `88. 88booo. 88   8D 88b  d88 db   8D    88    88.     88 `88.
+   ~Y8888P' 88   YD Y88888P Y8888P' ~Y8888P' `8888Y'    YP    Y88888P 88   YD
 
-Total requests: 46140
+                               0.3.0 by cytopia
 
-####################################################################################################
+      SETTINGS
+            Base URL:       http://www.domain.tld/
+            Timeout:        5s
+            Retries:        3
+            Valid codes:    2.., 3.., 403, 407, 411, 426, 429, 500, 505, 511
+
+      DEFAULT HEADERS
+            Accept-Encoding: gzip, deflate
+            Accept: */*
+            Connection: keep-alive
+
+      MUTATIONS
+            Useragents:     2
+            Host headers:   0
+            Methods:        5 (POST, GET, DELETE, PUT, PATCH)
+            Add slashes:    no
+            Words:          4614
+
+      TOTAL REQUESTS: 46140
+
+################################################################################
 [HEADER] User-Agent: Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)
-####################################################################################################
+################################################################################
 [200] [GET]    http://domain.tld/robots.txt
 
-####################################################################################################
+################################################################################
 [HEADER] User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A5376e Safari/8536.25
-####################################################################################################
+################################################################################
 [301] [POST]   http://domain.tld/robots.txt
 [301] [GET]    http://domain.tld/robots.txt
 [301] [DELETE] http://domain.tld/robots.txt
