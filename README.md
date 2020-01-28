@@ -135,7 +135,7 @@ Some websites behave differently for the same path depending on the specified us
 $ urlbuster \
   -W /usr/share/dirb/wordlists/common.txt \
   --mheader 'User-Agent:Googlebot/2.1 (+http://www.googlebot.com/bot.html)' \
-  -m 'POST,GET,DELETE,PUT,PATCH' \
+  --method 'POST,GET,DELETE,PUT,PATCH' \
   http://www.domain.tld/
 ```
 
