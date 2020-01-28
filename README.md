@@ -13,22 +13,25 @@
 [![Build Status](https://github.com/cytopia/urlbuster/workflows/building/badge.svg)](https://github.com/cytopia/urlbuster/actions?workflow=building)
 
 
-URL bruteforcer to locate existing and/or hidden files or directories.
+Powerful web directory fuzzer to locate existing and/or hidden files or directories.
 
-Similar to [dirb](http://dirb.sourceforge.net/) or [gobuster](https://github.com/OJ/gobuster), but also allows to iterate over multiple HTTP request methods,
-multiple useragents and multiple host headers.
+Similar to [dirb](http://dirb.sourceforge.net/) or [gobuster](https://github.com/OJ/gobuster), but
+with a lot of mutation options.
 
 
 ## Features
 
 * Proxy support
-* Basic Auth support
-* Digest Auth support
-* Persistent HTTP connection
-* Test different request methods
-* Test different user agents
-* Test different host header values
-* Test with and without a trailing slash
+* Cookie support
+* Basic Auth
+* Digest Auth
+* Request methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+* Custom HTTP header
+* Persistent and non-persistent HTTP connection
+* Mutate with different request methods
+* Mutate with different HTTP header
+* Mutate with different file extensions
+* Mutate with trailing slashes
 * Enumerate GET parameter values
 
 
@@ -37,11 +40,12 @@ multiple useragents and multiple host headers.
 pip install urlbuster
 ```
 
+
 ## Usage
 ```
-usage: urlbuster [options] -w <word>/-W <path> BASE_URL
-       urlbuster --help
-       urlbuster --version
+usage: urlbuster [options] -w <str>/-W <file> BASE_URL
+       urlbuster -v, --help
+       urlbuster -h, --version
 
 URL bruteforcer to locate existing and/or hidden files or directories.
 
@@ -55,49 +59,69 @@ required arguments:
   -w str, --word str    Word to use.
   -W f, --wordlist f    Path to wordlist to use.
 
-optional arguments:
-  -c str, --code str    Comma separated list of HTTP status code to treat as success.
-                        You can use a '.' (dot) as a wildcard.
-
-                        Default: 2.., 3.., 403, 407, 411, 426, 429, 500, 505, 511
-  -m str, --method str  Comma separated list of HTTP methods to test against each request.
-                        Note, each supplied method will double the number of requests.
-                        Supported methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
-                        Default: GET
-  -s str, --slash str   Append or omit a trailing slash to URLs to test.
-                        Options: both, yes, no
-                        Note, using 'both' will double the number of requests.
-                        Default: no
-  -a str, --agent str   Useragent string to send.
-  -A f, --agent-file f  Path to a newline separated file of useragents to use.
-                        Note, each supplied useragent will double the number of requests.
-  -h str, --host str    Host header value to send.
-  -H f, --host-file f   Path to a newline separated file of host header values to send.
-                        Note, each supplied host header value will double the number of requests.
+optional global arguments:
   -n, --new             Use a new connection for every request.
                         If not specified persistent http connection will be used for all requests.
+                        Note, using a new connection will decrease performance,
+                        but ensure to have a clean state on every request.
   -k, --insecure        Do not verify TLS certificates.
-  -b str, --auth-basic str
-                        Use basic authentication for all requests.
-                        Format: <user>:<pass>
-  -d str, --auth-digest str
-                        Use digest authentication for all requests.
-                        Format: <user>:<pass>
-  -p str, --proxy str   Use a proxy for all requests.
+  --code str [str ...]  HTTP status code to treat as success.
+                        You can use a '.' (dot) as a wildcard.
+                        Default: 2.. 3.. 403 407 411 426 429 500 505 511
+  --header h [h ...]    Custom http header string to add to all requests.
+                        Note, multiple values are allowed for multiple headers.
+                        Note, if duplicates are specified, the last one will overwrite.
+                        See --mheaders for mutations.
+                        Format: <key>:<val> [<key>:<val>]
+  --cookie c [c ...]    Cookie string to add to all requests.
+                        Format: <key>=<val> [<key>=<val>]
+  --proxy str           Use a proxy for all requests.
                         Format: http://<host>:<port>
                         Format: http://<user>:<pass>@<host>:<port>
-  -t s, --timeout s     Connection timeout in seconds.
-                        Default: 5
-  -r x, --retries x     Connection retries.
+                        Format: https://<host>:<port>
+                        Format: https://<user>:<pass>@<host>:<port>
+                        Format: socks5://<host>:<port>
+                        Format: socks5://<user>:<pass>@<host>:<port>
+  --auth-basic str      Use basic authentication for all requests.
+                        Format: <user>:<pass>
+  --auth-digest str     Use digest authentication for all requests.
+                        Format: <user>:<pass>
+  --timeout sec         Connection timeout in seconds for each request.
+                        Default: 5.0
+  --retry num           Connection retries per request.
                         Default: 3
-  --help                Show this help message and exit
-  --version             Show version information
+  --delay sec           Delay between requests to not flood the server.
+  --output file         Output file to write results to.
+
+optional mutating arguments:
+  The following arguments will increase the total number of requests to be made by
+  applying various mutations and testing each mutation on a separate request.
+
+  --method m [m ...]    List of HTTP methods to test each request against.
+                        Note, each supplied method will double the number of requests.
+                        Supported methods: GET POST PUT DELETE PATCH HEAD OPTIONS
+                        Default: GET
+  --mheader h [h ...]   Custom http header string to add to mutate all requests.
+                        Note, multiple values are allowed for multiple headers.
+                        Format: <key>:<val> [<key>:<val>]
+  --ext ext [ext ...]   List of file extensions to to add to words for testing.
+                        Note, each supplied extension will double the number of requests.
+                        Format: .zip [.pem]
+  --slash str           Append or omit a trailing slash to URLs to test.
+                        Note, a slash will be added after the extensions if they are specified as well.
+                        Note, using 'both' will double the number of requests.
+                        Options: both, yes, no
+                        Default: no
+
+misc arguments:
+  -h, --help            Show this help message and exit
+  -v, --version         Show version information
 
 examples
 
-  urlbuster -w /path/to/words http://example.com
-  urlbuster -w /path/to/words http://example.com:8000
-  urlbuster -k -w /path/to/words https://example.com:10000
+  urlbuster -W /path/to/words http://example.com/
+  urlbuster -W /path/to/words http://example.com:8000/
+  urlbuster -k -W /path/to/words https://example.com:10000/
 ```
 
 
@@ -110,54 +134,59 @@ Some websites behave differently for the same path depending on the specified us
 ```bash
 $ urlbuster \
   -W /usr/share/dirb/wordlists/common.txt \
-  -A /usr/share/urlbuster/examples/useragents-basic.txt \
+  --mheader 'User-Agent:Googlebot/2.1 (+http://www.googlebot.com/bot.html)' \
   -m 'POST,GET,DELETE,PUT,PATCH' \
   http://www.domain.tld/
 ```
 
 ```
-   db    db d8888b. db      d8888b. db    db .d8888. d888888b d88888b d8888b.
-   88    88 88  `8D 88      88  `8D 88    88 88'  YP `~~88~~' 88'     88  `8D
-   88    88 88oobY' 88      88oooY' 88    88 `8bo.      88    88ooooo 88oobY'
-   88    88 88`8b   88      88~~~b. 88    88   `Y8b.    88    88~~~~~ 88`8b
-   88b  d88 88 `88. 88booo. 88   8D 88b  d88 db   8D    88    88.     88 `88.
-   ~Y8888P' 88   YD Y88888P Y8888P' ~Y8888P' `8888Y'    YP    Y88888P 88   YD
+   ██╗   ██╗██████╗ ██╗     ██████╗ ██╗   ██╗███████╗████████╗███████╗██████╗
+   ██║   ██║██╔══██╗██║     ██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔════╝██╔══██╗
+   ██║   ██║██████╔╝██║     ██████╔╝██║   ██║███████╗   ██║   █████╗  ██████╔╝
+   ██║   ██║██╔══██╗██║     ██╔══██╗██║   ██║╚════██║   ██║   ██╔══╝  ██╔══██╗
+   ╚██████╔╝██║  ██║███████╗██████╔╝╚██████╔╝███████║   ██║   ███████╗██║  ██║
+    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
 
-                               0.3.0 by cytopia
+                               0.4.0 by cytopia
 
       SETTINGS
-            Base URL:       http://www.domain.tld/
-            Timeout:        5s
-            Retries:        3
-            Valid codes:    2.., 3.., 403, 407, 411, 426, 429, 500, 505, 511
-
-      DEFAULT HEADERS
-            Accept-Encoding: gzip, deflate
-            Accept: */*
-            Connection: keep-alive
+            Base URL:         http://www.domain.tld/
+            Connection:       Persistent
+            Valid codes:      2.., 3.., 403, 407, 411, 426, 429, 500, 505, 511
+            Timeout:          5.0s
+            Retries:          3
+            Delay:            None
 
       MUTATIONS
-            Useragents:     2
-            Host headers:   0
-            Methods:        5 (POST, GET, DELETE, PUT, PATCH)
-            Add slashes:    no
-            Words:          4614
+            Mutating headers: 2
+            Methods:          5 (POST, GET, DELETE, PUT, PATCH)
+            Slashes:          no
+            Extensions:       1 (empty extension)
+            Words:            4614
 
       TOTAL REQUESTS: 46140
 
-################################################################################
-[HEADER] User-Agent: Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)
-################################################################################
-[200] [GET]    http://domain.tld/robots.txt
 
-################################################################################
-[HEADER] User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A5376e Safari/8536.25
-################################################################################
-[301] [POST]   http://domain.tld/robots.txt
-[301] [GET]    http://domain.tld/robots.txt
-[301] [DELETE] http://domain.tld/robots.txt
-[301] [PUT]    http://domain.tld/robots.txt
-[301] [PATCH]  http://domain.tld/robots.txt
+--------------------------------------------------------------------------------
+Connection:      keep-alive
+Accept-Encoding: gzip, deflate
+Accept:          */*
+User-Agent:      python-requests/2.22.0
+
+[200] [GET]      http://domain.tld/robots.txt
+
+--------------------------------------------------------------------------------
+Connection:      keep-alive
+Accept-Encoding: gzip, deflate
+Accept:          */*
+User-Agent:      Googlebot/2.1 (+http://www.googlebot.com/bot.html)
+
+[200] [GET]      http://domain.tld/robots.txt
+[301] [POST]     http://domain.tld/robots.txt
+[301] [GET]      http://domain.tld/robots.txt
+[301] [DELETE]   http://domain.tld/robots.txt
+[301] [PUT]      http://domain.tld/robots.txt
+[301] [PATCH]    http://domain.tld/robots.txt
 ```
 
 

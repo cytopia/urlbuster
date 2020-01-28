@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """URL bruteforcer to locate existing and/or hidden files or directories.."""
 
 from __future__ import print_function
@@ -6,6 +7,7 @@ from __future__ import print_function
 import os
 import re
 import sys
+import itertools
 import argparse
 import requests
 
@@ -37,7 +39,7 @@ DEFAULT_CODES = [
     "505",
     "511",
 ]
-DEFAULT_TIMEOUT = 5
+DEFAULT_TIMEOUT = 5.0
 DEFAULT_RETRIES = 3
 
 
@@ -45,17 +47,27 @@ DEFAULT_RETRIES = 3
 # HELPER FUNCTIONS
 # -------------------------------------------------------------------------------------------------
 
+def get_status_text(curr, total, method, target, curr_try, retries):
+    return "{clr}({curr}/{total}): ({curr_try}/{retries}) [{method}] {target}{rst}".format(
+        clr="\033[93m",
+        curr=curr,
+        total=total,
+        curr_try=curr_try,
+        retries=retries,
+        method=method,
+        target=target,
+        rst="\033[00m"
+    )
 
-def print_status(data):
+
+def print_status(status):
     """Print temporary status."""
-    status = "{color}[TEST] {data}{rst}".format(color="\033[93m", data=data, rst="\033[00m")
     print(status, end="\r")
     sys.stdout.flush()
 
 
-def clear_status(data):
+def clear_status(status):
     """Deletet temporary status."""
-    status = "{color}[TEST] {data}{rst}".format(color="\033[93m", data=data, rst="\033[00m")
     print(" " * len(status), end="\r")  # clear line
     sys.stdout.flush()
 
@@ -84,79 +96,6 @@ def read_file(filepath):
 
 
 # -------------------------------------------------------------------------------------------------
-# RETRIEVE URL PARAM FUNCTIONS
-# -------------------------------------------------------------------------------------------------
-
-
-def get_useragents(agent, agent_file):
-    """Get list of useragent strings."""
-    if agent is not None:
-        return [agent]
-    if agent_file is not None:
-        return read_file(agent_file)
-    return [DEFAULT_USERAGENT]
-
-
-def get_host_header_values(host, host_file):
-    """Get list of host header values."""
-    if host is not None:
-        return [host]
-    if host_file is not None:
-        return read_file(host_file)
-    return []
-
-
-def get_http_methods(method):
-    """Get list of HTTP methods."""
-    if method is not None:
-        return method.split(",")
-    return [DEFAULT_METHOD]
-
-
-def get_slash_values(slash):
-    """Get list with empty element and or slash element."""
-    if slash is not None:
-        return SUPPORTED_SLASHES[slash]
-    return SUPPORTED_SLASHES[DEFAULT_SLASH]
-
-
-def get_headers(custom_headers):
-    """Retrieve HTTP headers."""
-    headers = requests.utils.default_headers()
-    del headers["User-Agent"]
-    for header in custom_headers:
-        key, val = header.split(":")
-        headers[key] = val
-    return headers
-
-
-def get_proxies(proxy):
-    """Retrieve proxy dict to be used for requests."""
-    if proxy is not None:
-        return {
-            "http": proxy,
-            "https": proxy,
-        }
-    return None
-
-
-def get_auth_method(auth_basic, auth_digest):
-    """Return authentication object."""
-    if auth_basic is not None:
-        return requests.auth.HTTPBasicAuth(auth_basic[0], auth_basic[1])
-    if auth_digest is not None:
-        return requests.auth.HTTPDigestAuth(auth_digest[0], auth_digest[1])
-    return None
-
-
-def get_words(word, wordlist):
-    """Return list of words."""
-    if word is not None:
-        return [word]
-    return read_file(wordlist)
-
-
-# -------------------------------------------------------------------------------------------------
 # URL FUNCTIONS
 # -------------------------------------------------------------------------------------------------
 
@@ -173,7 +112,7 @@ def get_session(auth, headers, proxies):
     return s
 
 
-def session_request(s, url, method, headers, timeout, verify):
+def session_request(s, url, method, cookies, headers, timeout, verify):
     """Connect to a persistent http connection."""
     # s.(get|post|delete|...)
     fn = getattr(s, method.lower())
@@ -184,6 +123,7 @@ def session_request(s, url, method, headers, timeout, verify):
                 url,
                 data={},
                 allow_redirects=False,
+                cookies=cookies,
                 headers=headers,
                 timeout=timeout,
                 verify=verify,
@@ -200,7 +140,7 @@ def session_request(s, url, method, headers, timeout, verify):
         return False, {"type": "exception", "err": err}
 
 
-def request(url, method, auth, headers, proxies, timeout, verify):
+def request(url, method, auth, cookies, headers, proxies, timeout, verify):
     """Open an http request."""
     # requests.(get|post|delete|...)
     fn = getattr(requests, method.lower())
@@ -212,6 +152,7 @@ def request(url, method, auth, headers, proxies, timeout, verify):
                 data={},
                 allow_redirects=False,
                 auth=auth,
+                cookies=cookies,
                 headers=headers,
                 proxies=proxies,
                 timeout=timeout,
@@ -245,15 +186,14 @@ def check_code(code, codes):
 
 def _args_check_codes(value):
     """Check argument for valid status codes."""
-    strval = str(value).replace(" ", "")
-    for code in strval.split(","):
-        code = code.replace(".", "1")
-        try:
-            code = int(code)
-        except ValueError:
-            raise argparse.ArgumentTypeError('Invalid status code "%s"')
-        if code < 100 or code >= 600:
-            raise argparse.ArgumentTypeError('Invalid status code "%s"')
+    strval = str(value)
+    code = strval.replace(".", "1")
+    try:
+        code = int(code)
+    except ValueError:
+        raise argparse.ArgumentTypeError('Invalid status code "%s"', strval)
+    if code < 100 or code >= 600:
+        raise argparse.ArgumentTypeError('Invalid status code "%s"', strval)
     return strval
 
 
@@ -262,18 +202,18 @@ def _args_check_auth(value):
     strval = str(value)
     auth = strval.split(":")
     if len(auth) != 2:
-        raise argparse.ArgumentTypeError('Invalid auth value "%s"')
+        raise argparse.ArgumentTypeError('Invalid auth value "%s"', strval)
     return strval
 
 
 def _args_check_method(value):
     """Check argument for valid methods."""
-    strval = str(value).replace(" ", "")
-    for method in strval.split(","):
-        if method not in SUPPORTED_METHODS:
-            raise argparse.ArgumentTypeError(
-                'Invalid method "%s". Supported: %s' % (value, ", ".join(SUPPORTED_METHODS))
-            )
+    strval = str(value)
+    method = strval
+    if method not in SUPPORTED_METHODS:
+        raise argparse.ArgumentTypeError(
+            'Invalid method "%s". Supported: %s' % (strval, ", ".join(SUPPORTED_METHODS))
+        )
     return strval
 
 
@@ -284,6 +224,31 @@ def _args_check_slash(value):
         raise argparse.ArgumentTypeError(
             'Invalid slash value "%s". Supported: %s' % (value, ", ".join(SUPPORTED_SLASHES.keys()))
         )
+    return strval
+
+
+def _args_check_header(value):
+    """Check argument for valid header value."""
+    strval = str(value)
+    if ":" not in strval:
+        raise argparse.ArgumentTypeError('Invalid header value "%s".' % (strval))
+    return strval
+
+
+def _args_check_proxy(value):
+    """Check argument for valid proxy value."""
+    strval = str(value)
+    if not re.match("(http(s)?|socks5)://(.+:.+@)?.+:[0-9]+", strval):
+        raise argparse.ArgumentTypeError('Invalid proxy value "%s".' % (strval))
+    print(strval)
+    return strval
+
+
+def _args_check_cookie(value):
+    """Check argument for valid cookie value."""
+    strval = str(value)
+    if "=" not in strval:
+        raise argparse.ArgumentTypeError('Invalid cookie value "%s".' % (strval))
     return strval
 
 
@@ -300,9 +265,9 @@ def get_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawTextHelpFormatter,
         add_help=False,
-        usage="""%(prog)s [options] -w <word>/-W <path> BASE_URL
-       %(prog)s --help
-       %(prog)s --version
+        usage="""%(prog)s [options] -w <str>/-W <file> BASE_URL
+       %(prog)s -v, --help
+       %(prog)s -h, --version
 """,
         description="""URL bruteforcer to locate existing and/or hidden files or directories.
 
@@ -311,12 +276,18 @@ multiple useragents and multiple host header values.
 """,
         epilog="""examples
 
-  %(prog)s -w /path/to/words http://example.com
-  %(prog)s -w /path/to/words http://example.com:8000
-  %(prog)s -k -w /path/to/words https://example.com:10000""",
+  %(prog)s -W /path/to/words http://example.com/
+  %(prog)s -W /path/to/words http://example.com:8000/
+  %(prog)s -k -W /path/to/words https://example.com:10000/""",
     )
     required = parser.add_argument_group("required arguments")
-    optional = parser.add_argument_group("optional arguments")
+    optional = parser.add_argument_group("optional global arguments")
+    mutating = parser.add_argument_group(
+        title="optional mutating arguments",
+        description="The following arguments will increase the total number of requests to be"
+        + " made by\napplying various mutations and testing each mutation on a separate request.",
+    )
+    misc = parser.add_argument_group("misc arguments")
     word = required.add_mutually_exclusive_group(required=True)
     word.add_argument(
         "-w", "--word", metavar="str", type=str, help="Word to use.",
@@ -325,82 +296,16 @@ multiple useragents and multiple host header values.
         "-W", "--wordlist", metavar="f", type=_args_check_file, help="Path to wordlist to use.",
     )
     optional.add_argument(
-        "-c",
-        "--code",
-        metavar="str",
-        required=False,
-        default=",".join(DEFAULT_CODES),
-        type=_args_check_codes,
-        help="Comma separated list of HTTP status code to treat as success.\n"
-        + "You can use a '.' (dot) as a wildcard.\n"
-        + "\nDefault: "
-        + ", ".join(DEFAULT_CODES),
-    )
-    optional.add_argument(
-        "-m",
-        "--method",
-        metavar="str",
-        required=False,
-        default=DEFAULT_METHOD,
-        type=_args_check_method,
-        help="Comma separated list of HTTP methods to test against each request.\n"
-        + "Note, each supplied method will double the number of requests.\n"
-        + "Supported methods: "
-        + ", ".join(SUPPORTED_METHODS)
-        + "\n"
-        + "Default: "
-        + DEFAULT_METHOD,
-    )
-    optional.add_argument(
-        "-s",
-        "--slash",
-        metavar="str",
-        required=False,
-        default="no",
-        type=_args_check_slash,
-        help="Append or omit a trailing slash to URLs to test.\n"
-        + "Options: "
-        + ", ".join(SUPPORTED_SLASHES.keys())
-        + "\n"
-        + "Note, using 'both' will double the number of requests.\n"
-        + "Default: "
-        + DEFAULT_SLASH,
-    )
-    agent = optional.add_mutually_exclusive_group(required=False)
-    agent.add_argument(
-        "-a", "--agent", metavar="str", required=False, type=str, help="Useragent string to send."
-    )
-    agent.add_argument(
-        "-A",
-        "--agent-file",
-        metavar="f",
-        required=False,
-        type=_args_check_file,
-        help="Path to a newline separated file of useragents to use.\n"
-        + "Note, each supplied useragent will double the number of requests.",
-    )
-    host = optional.add_mutually_exclusive_group(required=False)
-    host.add_argument(
-        "-h", "--host", metavar="str", required=False, type=str, help="Host header value to send."
-    )
-    host.add_argument(
-        "-H",
-        "--host-file",
-        metavar="f",
-        required=False,
-        type=_args_check_file,
-        help="Path to a newline separated file of host header values to send.\n"
-        + "Note, each supplied host header value will double the number of requests.",
-    )
-    optional.add_argument(
         "-n",
         "--new",
         required=False,
         default=False,
         action="store_true",
         help="Use a new connection for every request.\n"
-        + "If not specified persistent http connection will be used for all requests.",
-    ),
+        + "If not specified persistent http connection will be used for all requests.\n"
+        + "Note, using a new connection will decrease performance,\n"
+        + "but ensure to have a clean state on every request.",
+    )
     optional.add_argument(
         "-k",
         "--insecure",
@@ -408,51 +313,149 @@ multiple useragents and multiple host header values.
         default=False,
         action="store_true",
         help="Do not verify TLS certificates.",
-    ),
+    )
     optional.add_argument(
-        "-b",
+        "--code",
+        nargs="+",
+        metavar="str",
+        required=False,
+        default=DEFAULT_CODES,
+        type=_args_check_codes,
+        help="HTTP status code to treat as success.\n"
+        + "You can use a '.' (dot) as a wildcard.\n"
+        + "Default: "
+        + " ".join(DEFAULT_CODES),
+    )
+    optional.add_argument(
+        "--header",
+        nargs="+",
+        metavar="h",
+        default=[],
+        type=_args_check_header,
+        help="Custom http header string to add to all requests.\n"
+        + "Note, multiple values are allowed for multiple headers.\n"
+        + "Note, if duplicates are specified, the last one will overwrite.\n"
+        + "See --mheaders for mutations.\n"
+        + "Format: <key>:<val> [<key>:<val>]",
+    )
+    optional.add_argument(
+        "--cookie",
+        nargs="+",
+        metavar="c",
+        default=[],
+        type=_args_check_cookie,
+        help="Cookie string to add to all requests.\n" + "Format: <key>=<val> [<key>=<val>]",
+    )
+    optional.add_argument(
+        "--proxy",
+        metavar="str",
+        required=False,
+        default=None,
+        type=_args_check_proxy,
+        help="Use a proxy for all requests.\n"
+        + "Format: http://<host>:<port>\nFormat: http://<user>:<pass>@<host>:<port>\n"
+        + "Format: https://<host>:<port>\nFormat: https://<user>:<pass>@<host>:<port>\n"
+        + "Format: socks5://<host>:<port>\nFormat: socks5://<user>:<pass>@<host>:<port>",
+    )
+    auth = optional.add_mutually_exclusive_group(required=False)
+    auth.add_argument(
         "--auth-basic",
         metavar="str",
         required=False,
+        default=None,
         type=_args_check_auth,
         help="Use basic authentication for all requests.\n" + "Format: <user>:<pass>",
-    ),
-    auth = optional.add_mutually_exclusive_group(required=False)
+    )
     auth.add_argument(
-        "-d",
         "--auth-digest",
         metavar="str",
+        default=None,
         type=_args_check_auth,
         help="Use digest authentication for all requests.\n" + "Format: <user>:<pass>",
-    ),
-    auth.add_argument(
-        "-p",
-        "--proxy",
-        metavar="str",
-        type=str,
-        help="Use a proxy for all requests.\n"
-        + "Format: http://<host>:<port>\nFormat: http://<user>:<pass>@<host>:<port>",
-    ),
+    )
     optional.add_argument(
-        "-t",
         "--timeout",
-        metavar="s",
+        metavar="sec",
         required=False,
         default=DEFAULT_TIMEOUT,
-        type=int,
-        help="Connection timeout in seconds.\nDefault: " + str(DEFAULT_TIMEOUT),
-    ),
+        type=float,
+        help="Connection timeout in seconds for each request.\nDefault: " + str(DEFAULT_TIMEOUT),
+    )
     optional.add_argument(
-        "-r",
-        "--retries",
-        metavar="x",
+        "--retry",
+        metavar="num",
         required=False,
         default=DEFAULT_RETRIES,
         type=int,
-        help="Connection retries.\nDefault: " + str(DEFAULT_RETRIES),
-    ),
-    optional.add_argument("--help", action="help", help="Show this help message and exit")
+        help="Connection retries per request.\nDefault: " + str(DEFAULT_RETRIES),
+    )
     optional.add_argument(
+        "--delay",
+        metavar="sec",
+        required=False,
+        type=float,
+        help="Delay between requests to not flood the server.",
+    )
+    optional.add_argument(
+        "--output",
+        metavar="file",
+        required=False,
+        type=str,
+        help="Output file to write results to.",
+    )
+    mutating.add_argument(
+        "--method",
+        nargs="+",
+        metavar="m",
+        required=False,
+        default=[DEFAULT_METHOD],
+        type=_args_check_method,
+        help="List of HTTP methods to test each request against.\n"
+        + "Note, each supplied method will double the number of requests.\n"
+        + "Supported methods: "
+        + " ".join(SUPPORTED_METHODS)
+        + "\n"
+        + "Default: "
+        + DEFAULT_METHOD,
+    )
+    mutating.add_argument(
+        "--mheader",
+        nargs="+",
+        metavar="h",
+        default=[],
+        type=_args_check_header,
+        help="Custom http header string to add to mutate all requests.\n"
+        + "Note, multiple values are allowed for multiple headers.\n"
+        + "Format: <key>:<val> [<key>:<val>]",
+    )
+    mutating.add_argument(
+        "--ext",
+        nargs="+",
+        metavar="ext",
+        default=[""],
+        required=False,
+        help="List of file extensions to to add to words for testing.\n"
+        + "Note, each supplied extension will double the number of requests.\n"
+        + "Format: .zip [.pem]\n",
+    )
+    mutating.add_argument(
+        "--slash",
+        metavar="str",
+        required=False,
+        default="no",
+        type=_args_check_slash,
+        help="Append or omit a trailing slash to URLs to test.\n"
+        + "Note, a slash will be added after the extensions if they are specified as well.\n"
+        + "Note, using 'both' will double the number of requests.\n"
+        + "Options: "
+        + ", ".join(SUPPORTED_SLASHES.keys())
+        + "\n"
+        + "Default: "
+        + DEFAULT_SLASH,
+    )
+    misc.add_argument("-h", "--help", action="help", help="Show this help message and exit")
+    misc.add_argument(
+        "-v",
         "--version",
         action="version",
         version="%(prog)s " + VERSION + " by cytopia",
@@ -463,35 +466,112 @@ multiple useragents and multiple host header values.
 
 
 # -------------------------------------------------------------------------------------------------
-# MAIN ENTRYPOINT
+# PAREMETER GET FUNCTIONS
 # -------------------------------------------------------------------------------------------------
 
 
-def print_banner(
-    base_url,
-    timeout,
-    retries,
-    codes,
-    agents,
-    hosts,
-    methods,
-    words,
-    slash,
-    headers,
-    basic,
-    digest,
-    proxy,
-    total,
-):
+def get_words(word, wordlist):
+    """Get list of words."""
+    if word is not None:
+        return [word]
+    return read_file(wordlist)
+
+
+def get_headers(headers):
+    """Get dict of HTTP headers."""
+    data = requests.utils.default_headers()
+    for header in headers:
+        key, val = header.split(":")
+        key = key.strip()
+        val = val.strip()
+        if key in data:
+            del data[key]
+        data[key] = val
+    return data
+
+
+def get_cookies(cookies):
+    """Get dict of HTTP cookies."""
+    data = {}
+    for cookie in cookies:
+        key, val = cookie.split("=")
+        key = key.strip()
+        val = val.strip()
+        data[key] = val
+    return data
+
+
+def get_proxies(proxy):
+    """Get dict of proxies."""
+    if proxy is not None:
+        return {
+            "http": proxy,
+            "https": proxy,
+        }
+    return None
+
+
+def get_auth_method(auth_basic, auth_digest):
+    """Get authentication object."""
+    if auth_basic is not None:
+        return requests.auth.HTTPBasicAuth(auth_basic[0], auth_basic[1])
+    if auth_digest is not None:
+        return requests.auth.HTTPDigestAuth(auth_digest[0], auth_digest[1])
+    return None
+
+
+def get_slash_values(slash):
+    """Get list with empty element and or slash element."""
+    if slash is not None:
+        return SUPPORTED_SLASHES[slash]
+    return SUPPORTED_SLASHES[DEFAULT_SLASH]
+
+
+def merge_headers(headers, mheaders):
+    """Get list of header dict mutations."""
+    data = {}
+    for h in headers:
+        data[h] = [headers[h]]
+
+    # {key: [val1, val2]}
+    for mh in mheaders:
+        key, val = mh.split(":")
+        key = key.strip()
+        val = val.strip()
+        if key in data:
+            data[key].append(val)
+        else:
+            data[key] = [val]
+
+    return data
+
+
+def mutate_headers(**kwargs):
+    """Get mutated list of header dict with all combinations via cartesian product."""
+    keys = kwargs.keys()
+    vals = kwargs.values()
+    data = []
+    for instance in itertools.product(*vals):
+        data.append(dict(zip(keys, instance)))
+    return data
+
+
+# -------------------------------------------------------------------------------------------------
+# MAIN ENTRYPOINT: BANNER
+# -------------------------------------------------------------------------------------------------
+
+
+def print_banner(url, words, args, h_mutations):
     """Print initial banner."""
+    # http://www.patorjk.com/software/taag/
     print(
         """
-   db    db d8888b. db      d8888b. db    db .d8888. d888888b d88888b d8888b.
-   88    88 88  `8D 88      88  `8D 88    88 88'  YP `~~88~~' 88'     88  `8D
-   88    88 88oobY' 88      88oooY' 88    88 `8bo.      88    88ooooo 88oobY'
-   88    88 88`8b   88      88~~~b. 88    88   `Y8b.    88    88~~~~~ 88`8b
-   88b  d88 88 `88. 88booo. 88   8D 88b  d88 db   8D    88    88.     88 `88.
-   ~Y8888P' 88   YD Y88888P Y8888P' ~Y8888P' `8888Y'    YP    Y88888P 88   YD
+   ██╗   ██╗██████╗ ██╗     ██████╗ ██╗   ██╗███████╗████████╗███████╗██████╗
+   ██║   ██║██╔══██╗██║     ██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔════╝██╔══██╗
+   ██║   ██║██████╔╝██║     ██████╔╝██║   ██║███████╗   ██║   █████╗  ██████╔╝
+   ██║   ██║██╔══██╗██║     ██╔══██╗██║   ██║╚════██║   ██║   ██╔══╝  ██╔══██╗
+   ╚██████╔╝██║  ██║███████╗██████╔╝╚██████╔╝███████║   ██║   ███████╗██║  ██║
+    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
 
                                {version} by cytopia
 """.format(
@@ -499,27 +579,54 @@ def print_banner(
         )
     )
 
+    total = (
+        len(words)
+        * len(h_mutations)
+        * len(args.method)
+        * (2 if args.slash == "both" else 1)
+        * (1 if len(args.ext) == 0 else len(args.ext))
+    )
+
     print("      SETTINGS")
-    print("            Base URL:       {url}".format(url=base_url))
-    print("            Timeout:        {timeout}s".format(timeout=timeout))
-    print("            Retries:        {retries}".format(retries=retries))
-    print("            Valid codes:    {codes}".format(codes=", ".join(codes)))
-    if proxy is not None:
-        print("            Proxy:          {proxy}".format(proxy=proxy))
-    if basic is not None:
-        print("            Basisc auth:    {auth}".format(auth=basic))
-    if digest is not None:
-        print("            Digest auth:    {auth}".format(auth=digest))
+    print("            Base URL:         {url}".format(url=url))
+    print(
+        "            Connection:       {conn}".format(
+            conn="Non-persistent" if args.new else "Persistent"
+        )
+    )
+    print("            Valid codes:      {codes}".format(codes=", ".join(args.code)))
+    print("            Timeout:          {timeout}s".format(timeout=args.timeout))
+    print("            Retries:          {retries}".format(retries=args.retry))
+    print("            Delay:            {delay}".format(delay=args.delay))
+    if len(args.cookie) > 0:
+        print("            Cookie:           {cookie}".format(cookie="&".join(args.cookie)))
+    if args.proxy is not None:
+        print("            Proxy:            {proxy}".format(proxy=args.proxy))
+    if args.auth_basic is not None:
+        print("            Basisc auth:      {auth}".format(auth=args.auth_basic))
+    if args.auth_digest is not None:
+        print("            Digest auth:      {auth}".format(auth=args.auth_digest))
     print()
 
     print("      MUTATIONS")
-    print("            Useragents:     {num}".format(num=len(agents)))
-    print("            Host headers:   {num}".format(num=len(hosts)))
-    print("            Methods:        {num} ({m})".format(num=len(methods), m=", ".join(methods)))
-    print("            Add slashes:    {slash}".format(slash=slash))
-    print("            Words:          {num}".format(num=len(words)))
+    print("            Mutating headers: {num}".format(num=len(h_mutations)))
+    print(
+        "            Methods:          {num} ({m})".format(
+            num=len(args.method), m=", ".join(args.method)
+        )
+    )
+    print("            Slashes:          {slash}".format(slash=args.slash))
+    print(
+        "            Extensions:       {ext} ({val})".format(
+            ext=len(args.ext),
+            val="empty extension"
+            if args.ext[0] == "" and len(args.ext) == 1
+            else ", ".join('"' + item + '"' for item in args.ext),
+        )
+    )
+    print("            Words:            {num}".format(num=len(words)))
     print()
-    print("      TOTAL REQUESTS: {num}".format(num=(total)))
+    print("      TOTAL REQUESTS: {num}".format(num=total))
     print()
 
 
@@ -533,90 +640,80 @@ def print_round_header(headers):
         value = headers[key]
         while len(value) > max_length - len(key) - padding - 2:
             value = value[:-1]
-        print("{key}: {pad}{val}".format(key=key, pad=" "*padding, val=value))
+        print("{key}: {pad}{val}".format(key=key, pad=" " * padding, val=value))
     print()
+
+
+# -------------------------------------------------------------------------------------------------
+# MAIN ENTRYPOINT
+# -------------------------------------------------------------------------------------------------
 
 
 def main():
     """Start the program."""
     args = get_args()
-    agents = get_useragents(args.agent, args.agent_file)
-    hosts = get_host_header_values(args.host, args.host_file)
-    methods = get_http_methods(args.method)
-    slashes = get_slash_values(args.slash)
-    proxies = get_proxies(args.proxy)
-    auth = get_auth_method(args.auth_basic, args.auth_digest)
-    headers = get_headers([])
-    words = get_words(args.word, args.wordlist)
-
-    if not args.new:
-        sess = get_session(auth, headers, proxies)
 
     # Get base url
     url = args.BASE_URL
+    # optional arguments
+    headers_initial = get_headers(args.header)
+    cookies = get_cookies(args.cookie)
+    proxies = get_proxies(args.proxy)
+    auth = get_auth_method(args.auth_basic, args.auth_digest)
+    # mutating arguments
+    methods = args.method
+    extensions = args.ext
+    slashes = get_slash_values(args.slash)
+    headers_mutated = merge_headers(headers_initial, args.mheader)
+    headers_mutated = mutate_headers(**headers_mutated)
+    # dictionary words
+    words = get_words(args.word, args.wordlist)
 
-    # Get http status codes to treat as success
-    codes = args.code.split(",")
+    if not args.new:
+        sess = get_session(auth, headers_initial, proxies)
 
-    num_hosts = 1 if len(hosts) == 0 else len(hosts)
-    num_total = len(agents) * len(methods) * num_hosts * len(words) * len(slashes)
-    print_banner(
-        url,
-        args.timeout,
-        args.retries,
-        codes,
-        agents,
-        hosts,
-        methods,
-        words,
-        args.slash,
-        headers,
-        args.auth_basic,
-        args.auth_digest,
-        args.proxy,
-        num_total,
+    print_banner(url, words, args, headers_mutated)
+
+    curr = 1
+    total = (
+        len(words)
+        * len(headers_mutated)
+        * len(args.method)
+        * (2 if args.slash == "both" else 1)
+        * len(extensions)
     )
-
-    num_curr = 1
-    for a, agent in enumerate(agents):
-        for h, host in enumerate([None] if len(hosts) == 0 else hosts):
-            # Enrich headers
-            if host is not None:
-                headers["Host"] = host
-            if agent is not None:
-                headers["User-Agent"] = agent
-
-            print_round_header(headers)
-
-            for m, method in enumerate(methods):
-                for w, word in enumerate(words):
-                    for s, slash in enumerate(slashes):
-                        target = url + word + slash
-                        for retry in range(args.retries):
-                            status = "({curr}/{total}): ({n}/{r}) [{m}] {target}".format(
-                                curr=num_curr,
-                                total=num_total,
-                                m=method,
-                                target=target,
-                                n=retry + 1,
-                                r=args.retries,
-                            )
-                            print_status(status)
+    for headers in headers_mutated:
+        print_round_header(headers)
+        for method in methods:
+            for word in words:
+                for extension in extensions:
+                    for slash in slashes:
+                        target = url + word + extension + slash
+                        for retry in range(args.retry):
+                            s = get_status_text(curr, total, method, target, retry + 1, args.retry)
+                            print_status(s)
                             if not args.new:
                                 succ, conn = session_request(
-                                    sess, target, method, headers, args.timeout, not args.insecure
+                                    sess,
+                                    target,
+                                    method,
+                                    cookies,
+                                    headers,
+                                    args.timeout,
+                                    not args.insecure,
                                 )
                             else:
                                 succ, conn = request(
                                     target,
                                     method,
                                     auth,
+                                    cookies,
                                     headers,
                                     proxies,
                                     args.timeout,
                                     not args.insecure,
                                 )
-                            clear_status(status)
+                            clear_status(s)
                             if succ:
                                 break
                         if not succ:
@@ -627,13 +724,13 @@ def main():
                             )
                         else:
                             code = conn.status_code
-                            if check_code(code, codes):
+                            if check_code(code, args.code):
                                 print_succ(
                                     "[{code}] [{m}] {target}".format(
                                         code=code, m=method, target=target
                                     )
                                 )
-                        num_curr += 1
+                        curr += 1
     print()
 
 
