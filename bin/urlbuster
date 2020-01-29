@@ -4,12 +4,14 @@
 
 from __future__ import print_function
 
+import itertools
 import os
 import re
 import sys
-import itertools
+import time
 import argparse
 import requests
+from datetime import datetime
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
@@ -19,7 +21,7 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 # GLOBALS
 # -------------------------------------------------------------------------------------------------
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 
 DEFAULT_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.123 Safari/537.36"  # noqa: E501
 DEFAULT_SLASH = "no"
@@ -64,6 +66,12 @@ def get_status_text(curr, total, method, target, curr_try, retries):
     )
 
 
+def print_wait_message(delay):
+    """Print temporary delay message."""
+    print("Delaying next request for %ss ..." % (str(delay)), end="\r")
+    sys.stdout.flush()
+
+
 def print_status(status):
     """Print temporary status."""
     print(status, end="\r")
@@ -99,6 +107,11 @@ def read_file(filepath):
     return [x.strip() for x in content]
 
 
+def append_output(fp, data):
+    """Append data to an output file."""
+    fp.write("%s\n" % (data))
+
+
 # -------------------------------------------------------------------------------------------------
 # URL FUNCTIONS
 # -------------------------------------------------------------------------------------------------
@@ -116,7 +129,7 @@ def get_session(auth, headers, proxies):
     return s
 
 
-def session_request(s, url, method, cookies, headers, timeout, verify):
+def session_request(s, url, method, cookies, headers, timeout, follow, verify):
     """Connect to a persistent http connection."""
     # s.(get|post|delete|...)
     fn = getattr(s, method.lower())
@@ -126,7 +139,7 @@ def session_request(s, url, method, cookies, headers, timeout, verify):
             fn(
                 url,
                 data={},
-                allow_redirects=False,
+                allow_redirects=follow,
                 cookies=cookies,
                 headers=headers,
                 timeout=timeout,
@@ -144,7 +157,7 @@ def session_request(s, url, method, cookies, headers, timeout, verify):
         return False, {"type": "exception", "err": err}
 
 
-def request(url, method, auth, cookies, headers, proxies, timeout, verify):
+def request(url, method, auth, cookies, headers, proxies, timeout, follow, verify):
     """Open an http request."""
     # requests.(get|post|delete|...)
     fn = getattr(requests, method.lower())
@@ -154,7 +167,7 @@ def request(url, method, auth, cookies, headers, proxies, timeout, verify):
             fn(
                 url,
                 data={},
-                allow_redirects=False,
+                allow_redirects=follow,
                 auth=auth,
                 cookies=cookies,
                 headers=headers,
@@ -208,6 +221,18 @@ def _args_check_auth(value):
     if len(auth) != 2:
         raise argparse.ArgumentTypeError('Invalid auth value "%s"', strval)
     return strval
+
+
+def _args_check_delay(value):
+    """Check argument for valid delay."""
+    try:
+        floatval = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError('Invalid delay value "%s"', str(value))
+    if floatval <= 0:
+        raise argparse.ArgumentTypeError('Invalid delay value "%s"', str(value))
+
+    return floatval
 
 
 def _args_check_method(value):
@@ -308,7 +333,17 @@ multiple useragents and multiple host header values.
         help="Use a new connection for every request.\n"
         + "If not specified persistent http connection will be used for all requests.\n"
         + "Note, using a new connection will decrease performance,\n"
-        + "but ensure to have a clean state on every request.",
+        + "but ensure to have a clean state on every request.\n"
+        + "A persistent connection on the other hand will use any additional cookie values\n"
+        + "it has received from a previous request.",
+    )
+    optional.add_argument(
+        "-f",
+        "--follow",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Follow redirects.",
     )
     optional.add_argument(
         "-k",
@@ -397,13 +432,15 @@ multiple useragents and multiple host header values.
         "--delay",
         metavar="sec",
         required=False,
-        type=float,
+        default=None,
+        type=_args_check_delay,
         help="Delay between requests to not flood the server.",
     )
     optional.add_argument(
         "--output",
         metavar="file",
         required=False,
+        default=None,
         type=str,
         help="Output file to write results to.",
     )
@@ -565,23 +602,10 @@ def mutate_headers(**kwargs):
 # -------------------------------------------------------------------------------------------------
 
 
-def print_banner(url, words, args, h_mutations):
+def get_banner(url, words, args, h_mutations):
     """Print initial banner."""
-    # http://www.patorjk.com/software/taag/
-    print(
-        """
-   ██╗   ██╗██████╗ ██╗     ██████╗ ██╗   ██╗███████╗████████╗███████╗██████╗
-   ██║   ██║██╔══██╗██║     ██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔════╝██╔══██╗
-   ██║   ██║██████╔╝██║     ██████╔╝██║   ██║███████╗   ██║   █████╗  ██████╔╝
-   ██║   ██║██╔══██╗██║     ██╔══██╗██║   ██║╚════██║   ██║   ██╔══╝  ██╔══██╗
-   ╚██████╔╝██║  ██║███████╗██████╔╝╚██████╔╝███████║   ██║   ███████╗██║  ██║
-    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
-
-                               {version} by cytopia
-""".format(
-            version=VERSION
-        )
-    )
+    now = datetime.now()
+    time = now.strftime("%Y-%m-%d %H:%M:%S")
 
     total = (
         len(words)
@@ -591,61 +615,86 @@ def print_banner(url, words, args, h_mutations):
         * (1 if len(args.ext) == 0 else len(args.ext))
     )
 
-    print("      SETTINGS")
-    print("            Base URL:         {url}".format(url=url))
-    print(
-        "            Connection:       {conn}".format(
-            conn="Non-persistent" if args.new else "Persistent"
-        )
-    )
-    print("            Valid codes:      {codes}".format(codes=", ".join(args.code)))
-    print("            Timeout:          {timeout}s".format(timeout=args.timeout))
-    print("            Retries:          {retries}".format(retries=args.retry))
-    print("            Delay:            {delay}".format(delay=args.delay))
-    if len(args.cookie) > 0:
-        print("            Cookie:           {cookie}".format(cookie="&".join(args.cookie)))
-    if args.proxy is not None:
-        print("            Proxy:            {proxy}".format(proxy=args.proxy))
+    auth = ""
     if args.auth_basic is not None:
-        print("            Basisc auth:      {auth}".format(auth=args.auth_basic))
-    if args.auth_digest is not None:
-        print("            Digest auth:      {auth}".format(auth=args.auth_digest))
-    print()
+        auth = "\n            Basisc auth:      {auth}".format(auth=args.auth_basic)
+    elif args.auth_digest is not None:
+        auth = "\n            Digest auth:      {auth}".format(auth=args.auth_digest)
 
-    print("      MUTATIONS")
-    print("            Mutating headers: {num}".format(num=len(h_mutations)))
-    print(
-        "            Methods:          {num} ({m})".format(
-            num=len(args.method), m=", ".join(args.method)
-        )
+    if args.ext[0] == "" and len(args.ext) == 1:
+        ext_value = "empty extension"
+    else:
+        ext_value = ", ".join('"' + item + '"' for item in args.ext)
+
+    # http://www.patorjk.com/software/taag/
+    return """
+   ██╗   ██╗██████╗ ██╗     ██████╗ ██╗   ██╗███████╗████████╗███████╗██████╗
+   ██║   ██║██╔══██╗██║     ██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔════╝██╔══██╗
+   ██║   ██║██████╔╝██║     ██████╔╝██║   ██║███████╗   ██║   █████╗  ██████╔╝
+   ██║   ██║██╔══██╗██║     ██╔══██╗██║   ██║╚════██║   ██║   ██╔══╝  ██╔══██╗
+   ╚██████╔╝██║  ██║███████╗██████╔╝╚██████╔╝███████║   ██║   ███████╗██║  ██║
+    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
+
+                               {version} by cytopia
+
+      SETTINGS
+            Base URL:         {url}
+            Connection:       {conn}
+            Redirects:        {redir}
+            Valid codes:      {codes}
+            Timeout:          {timeout}s
+            Retries:          {retries}
+            Delay:            {delay}s{cookie}{proxy}{auth}
+
+      MUTATIONS
+            Mutating headers: {num_header}
+            Methods:          {num_method} ({methods})
+            Slashes:          {slash}
+            Extensions:       {num_ext} ({exts})
+            Words:            {words}
+
+      TOTAL REQUESTS: {total}
+      START TIME:     {time}
+
+""".format(
+        version=VERSION,
+        url=url,
+        conn="Non-persistent" if args.new else "Persistent",
+        redir="Follow" if args.follow else "Don't follow",
+        codes=", ".join(args.code),
+        timeout=args.timeout,
+        retries=args.retry,
+        delay=args.delay,
+        cookie="\n" + " " * 12 + "Cookie:           " + "&".join(args.cookie)
+        if args.cookie
+        else "",
+        proxy="\n" + " " * 12 + "Proxy:            " + args.proxy if args.proxy else "",
+        auth=auth,
+        num_header=len(h_mutations),
+        num_method=len(args.method),
+        methods=", ".join(args.method),
+        slash=args.slash,
+        num_ext=len(args.ext),
+        exts=ext_value,
+        words=len(words),
+        total=total,
+        time=time,
     )
-    print("            Slashes:          {slash}".format(slash=args.slash))
-    print(
-        "            Extensions:       {ext} ({val})".format(
-            ext=len(args.ext),
-            val="empty extension"
-            if args.ext[0] == "" and len(args.ext) == 1
-            else ", ".join('"' + item + '"' for item in args.ext),
-        )
-    )
-    print("            Words:            {num}".format(num=len(words)))
-    print()
-    print("      TOTAL REQUESTS: {num}".format(num=total))
-    print()
 
 
-def print_round_header(headers):
+def get_mutation_round_header(headers):
     """Print round header with http headers."""
+    data = []
     max_length = 80
     key_length = len(max(headers.keys(), key=len))
-    print("-" * max_length)
+    data.append("-" * max_length)
     for key in headers:
         padding = key_length - len(key)
         value = headers[key]
         while len(value) > max_length - len(key) - padding - 2:
             value = value[:-1]
-        print("{key}: {pad}{val}".format(key=key, pad=" " * padding, val=value))
-    print()
+        data.append("{key}: {pad}{val}".format(key=key, pad=" " * padding, val=value))
+    return "\n".join(data) + "\n"
 
 
 # -------------------------------------------------------------------------------------------------
@@ -657,8 +706,6 @@ def main():
     """Start the program."""
     args = get_args()
 
-    # Get base url
-    url = args.BASE_URL
     # optional arguments
     headers_initial = get_headers(args.header)
     cookies = get_cookies(args.cookie)
@@ -673,10 +720,20 @@ def main():
     # dictionary words
     words = get_words(args.word, args.wordlist)
 
+    banner = get_banner(args.BASE_URL, words, args, headers_mutated)
+
+    if args.output is not None:
+        try:
+            fp = open(args.output, "w")
+            append_output(fp, banner)
+        except (IOError, OSError) as err:
+            print("%s" % (err), file=sys.stderr)
+            sys.exit(1)
+
+    print(banner)
+
     if not args.new:
         sess = get_session(auth, headers_initial, proxies)
-
-    print_banner(url, words, args, headers_mutated)
 
     curr = 1
     total = (
@@ -687,12 +744,15 @@ def main():
         * len(extensions)
     )
     for headers in headers_mutated:
-        print_round_header(headers)
+        rbanner = get_mutation_round_header(headers)
+        print(rbanner)
+        if args.output is not None:
+            append_output(fp, rbanner)
         for method in methods:
             for word in words:
                 for extension in extensions:
                     for slash in slashes:
-                        target = url + word + extension + slash
+                        target = args.BASE_URL + word + extension + slash
                         for retry in range(args.retry):
                             s = get_status_text(curr, total, method, target, retry + 1, args.retry)
                             print_status(s)
@@ -704,6 +764,7 @@ def main():
                                     cookies,
                                     headers,
                                     args.timeout,
+                                    args.follow,
                                     not args.insecure,
                                 )
                             else:
@@ -715,6 +776,7 @@ def main():
                                     headers,
                                     proxies,
                                     args.timeout,
+                                    args.follow,
                                     not args.insecure,
                                 )
                             clear_status(s)
@@ -729,13 +791,19 @@ def main():
                         else:
                             code = conn.status_code
                             if check_code(code, args.code):
-                                print_succ(
-                                    "[{code}] [{m}] {target}".format(
-                                        code=code, m=method, target=target
-                                    )
+                                succ_msg = "[{code}] [{m}] {target}".format(
+                                    code=code, m=method, target=target
                                 )
+                                print_succ(succ_msg)
+                                if args.output is not None:
+                                    append_output(fp, succ_msg)
+                        if args.delay > 0:
+                            print_wait_message(args.delay)
+                            time.sleep(args.delay)
                         curr += 1
-    print()
+        print()
+    # Close file descriptor
+    fp.close()
 
 
 if __name__ == "__main__":
