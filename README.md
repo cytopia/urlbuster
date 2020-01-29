@@ -70,6 +70,9 @@ optional global arguments:
                         If not specified persistent http connection will be used for all requests.
                         Note, using a new connection will decrease performance,
                         but ensure to have a clean state on every request.
+                        A persistent connection on the other hand will use any additional cookie values
+                        it has received from a previous request.
+  -f, --follow          Follow redirects.
   -k, --insecure        Do not verify TLS certificates.
   --code str [str ...]  HTTP status code to treat as success.
                         You can use a '.' (dot) as a wildcard.
@@ -153,7 +156,7 @@ $ urlbuster \
    ╚██████╔╝██║  ██║███████╗██████╔╝╚██████╔╝███████║   ██║   ███████╗██║  ██║
     ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
 
-                               0.4.0 by cytopia
+                               0.4.1 by cytopia
 
       SETTINGS
             Base URL:         http://www.domain.tld/
@@ -171,6 +174,7 @@ $ urlbuster \
             Words:            4614
 
       TOTAL REQUESTS: 46140
+      START TIME:     2020-01-29 08:52:12
 
 
 --------------------------------------------------------------------------------
