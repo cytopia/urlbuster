@@ -21,7 +21,7 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 # GLOBALS
 # -------------------------------------------------------------------------------------------------
 
-VERSION = "0.4.1"
+VERSION = "0.5.0"
 
 DEFAULT_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.123 Safari/537.36"  # noqa: E501
 DEFAULT_SLASH = "no"
@@ -129,8 +129,11 @@ def get_session(auth, headers, proxies):
     return s
 
 
-def session_request(s, url, method, cookies, headers, timeout, follow, verify):
+def session_request(s, url, method, payloads, cookies, headers, timeout, follow, verify):
     """Connect to a persistent http connection."""
+    data = {}
+    if method in ["POST", "PUT", "PATCH"]:
+        data = payloads
     # s.(get|post|delete|...)
     fn = getattr(s, method.lower())
     try:
@@ -138,7 +141,7 @@ def session_request(s, url, method, cookies, headers, timeout, follow, verify):
             True,
             fn(
                 url,
-                data={},
+                data=data,
                 allow_redirects=follow,
                 cookies=cookies,
                 headers=headers,
@@ -157,8 +160,11 @@ def session_request(s, url, method, cookies, headers, timeout, follow, verify):
         return False, {"type": "exception", "err": err}
 
 
-def request(url, method, auth, cookies, headers, proxies, timeout, follow, verify):
+def request(url, method, auth, payloads, cookies, headers, proxies, timeout, follow, verify):
     """Open an http request."""
+    data = {}
+    if method in ["POST", "PUT", "PATCH"]:
+        data = payloads
     # requests.(get|post|delete|...)
     fn = getattr(requests, method.lower())
     try:
@@ -166,7 +172,7 @@ def request(url, method, auth, cookies, headers, proxies, timeout, follow, verif
             True,
             fn(
                 url,
-                data={},
+                data=data,
                 allow_redirects=follow,
                 auth=auth,
                 cookies=cookies,
@@ -273,6 +279,14 @@ def _args_check_proxy(value):
     return strval
 
 
+def _args_check_payload(value):
+    """Check argument for valid payload value."""
+    strval = str(value)
+    if "=" not in strval:
+        raise argparse.ArgumentTypeError('Invalid payload value "%s".' % (strval))
+    return strval
+
+
 def _args_check_cookie(value):
     """Check argument for valid cookie value."""
     strval = str(value)
@@ -295,7 +309,7 @@ def get_args():
         formatter_class=argparse.RawTextHelpFormatter,
         add_help=False,
         usage="""%(prog)s [options] -w <str>/-W <file> BASE_URL
-       %(prog)s -v, --help
+       %(prog)s -V, --help
        %(prog)s -h, --version
 """,
         description="""URL bruteforcer to locate existing and/or hidden files or directories.
@@ -354,6 +368,14 @@ multiple useragents and multiple host header values.
         help="Do not verify TLS certificates.",
     )
     optional.add_argument(
+        "-v",
+        "--verbose",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Show also missed URLs.",
+    )
+    optional.add_argument(
         "--code",
         nargs="+",
         metavar="str",
@@ -364,6 +386,18 @@ multiple useragents and multiple host header values.
         + "You can use a '.' (dot) as a wildcard.\n"
         + "Default: "
         + " ".join(DEFAULT_CODES),
+    )
+    optional.add_argument(
+        "--payload",
+        nargs="+",
+        metavar="p",
+        default=[],
+        type=_args_check_payload,
+        help="POST, PUT and PATCH payloads for all requests.\n"
+        + "Note, multiple values are allowed for multiple payloads.\n"
+        + "Note, if duplicates are specified, the last one will overwrite.\n"
+        + "See --mpayload for mutations.\n"
+        + "Format: <key>=<val> [<key>=<val>]",
     )
     optional.add_argument(
         "--header",
@@ -460,6 +494,16 @@ multiple useragents and multiple host header values.
         + DEFAULT_METHOD,
     )
     mutating.add_argument(
+        "--mpayload",
+        nargs="+",
+        metavar="p",
+        default=[],
+        type=_args_check_payload,
+        help="POST, PUT and PATCH payloads to mutate all requests..\n"
+        + "Note, multiple values are allowed for multiple payloads.\n"
+        + "Format: <key>=<val> [<key>=<val>]",
+    )
+    mutating.add_argument(
         "--mheader",
         nargs="+",
         metavar="h",
@@ -496,7 +540,7 @@ multiple useragents and multiple host header values.
     )
     misc.add_argument("-h", "--help", action="help", help="Show this help message and exit")
     misc.add_argument(
-        "-v",
+        "-V",
         "--version",
         action="version",
         version="%(prog)s " + VERSION + " by cytopia",
@@ -519,7 +563,9 @@ def get_words(word, wordlist):
 
 
 def get_headers(headers):
-    """Get dict of HTTP headers."""
+    """Get dict of HTTP headers.
+    This converts cmd argument headers from [key1:val, key2:val] to {key1:val, key2:val}
+    and merges it with requests library default header."""
     data = requests.utils.default_headers()
     for header in headers:
         key, val = header.split(":")
@@ -531,8 +577,21 @@ def get_headers(headers):
     return data
 
 
+def get_payloads(payloads):
+    """Get dict of POST/PUT/PATCH payloads.
+    This converts cmd argument payloads from [key1=val, key2=val] to {key1:val, key2:val}."""
+    data = {}
+    for payload in payloads:
+        key, val = payload.split("=")
+        key = key.strip()
+        val = val.strip()
+        data[key] = val
+    return data
+
+
 def get_cookies(cookies):
-    """Get dict of HTTP cookies."""
+    """Get dict of HTTP cookies.
+    This converts cmd argument cookies from [key1=val, key2=val] to {key1:val, key2:val}."""
     data = {}
     for cookie in cookies:
         key, val = cookie.split("=")
@@ -568,15 +627,15 @@ def get_slash_values(slash):
     return SUPPORTED_SLASHES[DEFAULT_SLASH]
 
 
-def merge_headers(headers, mheaders):
-    """Get list of header dict mutations."""
+def merge_dict_values(values, mvalues, sep=":"):
+    """Merge values with mutatable values (headers and payloads)."""
     data = {}
-    for h in headers:
-        data[h] = [headers[h]]
-
+    # {key: val}
+    for k in values:
+        data[k] = [values[k]]
     # {key: [val1, val2]}
-    for mh in mheaders:
-        key, val = mh.split(":")
+    for m in mvalues:
+        key, val = m.split(sep)
         key = key.strip()
         val = val.strip()
         if key in data:
@@ -587,8 +646,10 @@ def merge_headers(headers, mheaders):
     return data
 
 
-def mutate_headers(**kwargs):
-    """Get mutated list of header dict with all combinations via cartesian product."""
+def cartesian_product(**kwargs):
+    """Get mutated list of dict with all combinations via cartesian product."""
+    # Input:  {key: [val1, val2]}
+    # Output: [{key: val1}, {key: val2}]
     keys = kwargs.keys()
     vals = kwargs.values()
     data = []
@@ -597,23 +658,55 @@ def mutate_headers(**kwargs):
     return data
 
 
+def mutate_headers(headers, mheaders):
+    """Get list of header dict mutations."""
+    headers = merge_dict_values(headers, mheaders, ":")
+    return cartesian_product(**headers)
+
+
+def mutate_payloads(payloads, mpayloads):
+    """Get list of payload dict mutations."""
+    payloads = merge_dict_values(payloads, mpayloads, "=")
+    return cartesian_product(**payloads)
+
+
+def intersection(list1, list2):
+    """Get intersection values of two lists."""
+    return list(set(list1).intersection(list2))
+
+
 # -------------------------------------------------------------------------------------------------
 # MAIN ENTRYPOINT: BANNER
 # -------------------------------------------------------------------------------------------------
 
 
-def get_banner(url, words, args, h_mutations):
+def total_requests(words, mheaders, mpayloads, args):
+    len_mpayloads = 1 if mpayloads == [{}] else len(mpayloads) - 1
+    total_with_playload_mutations = (
+        len(words)
+        * len_mpayloads
+        * len(mheaders)
+        * len(intersection(args.method, ["POST", "PUT", "PATCH"]))
+        * (2 if args.slash == "both" else 1)
+        * (1 if len(args.ext) == 0 else len(args.ext))
+    )
+    total_no_playloads = (
+        len(words)
+        * len(mheaders)
+        * len(intersection(args.method, ["GET", "HEAD", "OPTIONS", "DELETE"]))
+        * (2 if args.slash == "both" else 1)
+        * (1 if len(args.ext) == 0 else len(args.ext))
+    )
+    return total_with_playload_mutations + total_no_playloads
+
+
+def get_banner(url, words, args, mheaders, mpayloads):
     """Print initial banner."""
     now = datetime.now()
     time = now.strftime("%Y-%m-%d %H:%M:%S")
 
-    total = (
-        len(words)
-        * len(h_mutations)
-        * len(args.method)
-        * (2 if args.slash == "both" else 1)
-        * (1 if len(args.ext) == 0 else len(args.ext))
-    )
+    total = total_requests(words, mheaders, mpayloads, args)
+    mmethods = ", ".join(intersection(args.method, ["POST", "PUT", "PATCH"]))
 
     auth = ""
     if args.auth_basic is not None:
@@ -638,20 +731,22 @@ def get_banner(url, words, args, h_mutations):
                                {version} by cytopia
 
       SETTINGS
-            Base URL:         {url}
-            Connection:       {conn}
-            Redirects:        {redir}
-            Valid codes:      {codes}
-            Timeout:          {timeout}s
-            Retries:          {retries}
-            Delay:            {delay}s{cookie}{proxy}{auth}
+            Base URL:          {url}
+            Valid codes:       {codes}
+            Connection:        {conn}
+            Redirects:         {redir}
+            Payloads:          {payloads}{cookie}{proxy}{auth}
+            Timeout:           {timeout}s
+            Retries:           {retries}
+            Delay:             {delay}
 
       MUTATIONS
-            Mutating headers: {num_header}
-            Methods:          {num_method} ({methods})
-            Slashes:          {slash}
-            Extensions:       {num_ext} ({exts})
-            Words:            {words}
+            Mutating headers:  {num_header}
+            Mutating payloads: {num_payloads}{mmethods}
+            Methods:           {num_method} ({methods})
+            Slashes:           {slash}
+            Extensions:        {num_ext} ({exts})
+            Words:             {words}
 
       TOTAL REQUESTS: {total}
       START TIME:     {time}
@@ -660,17 +755,19 @@ def get_banner(url, words, args, h_mutations):
         version=VERSION,
         url=url,
         conn="Non-persistent" if args.new else "Persistent",
+        payloads="&".join(args.payload) if args.payload else "None",
         redir="Follow" if args.follow else "Don't follow",
         codes=", ".join(args.code),
         timeout=args.timeout,
         retries=args.retry,
-        delay=args.delay,
-        cookie="\n" + " " * 12 + "Cookie:           " + "&".join(args.cookie)
+        delay=str(args.delay) + "s" if args.delay else "None",
+        cookie="\n" + " " * 12 + "Cookies:          " + "&".join(args.cookie)
         if args.cookie
         else "",
         proxy="\n" + " " * 12 + "Proxy:            " + args.proxy if args.proxy else "",
         auth=auth,
-        num_header=len(h_mutations),
+        num_header=len(mheaders),
+        num_payloads=0 if mpayloads == [{}] else len(mpayloads),
         num_method=len(args.method),
         methods=", ".join(args.method),
         slash=args.slash,
@@ -679,10 +776,11 @@ def get_banner(url, words, args, h_mutations):
         words=len(words),
         total=total,
         time=time,
+        mmethods=" (" + mmethods + ")" if len(mmethods) else ""
     )
 
 
-def get_mutation_round_header(headers):
+def get_mutation_round_header_banner(headers):
     """Print round header with http headers."""
     data = []
     max_length = 80
@@ -708,19 +806,29 @@ def main():
 
     # optional arguments
     headers_initial = get_headers(args.header)
+    payloads_initial = get_payloads(args.payload)
+
     cookies = get_cookies(args.cookie)
     proxies = get_proxies(args.proxy)
     auth = get_auth_method(args.auth_basic, args.auth_digest)
+
     # mutating arguments
+    headers_mutated = mutate_headers(headers_initial, args.mheader)
+    payloads_mutated = mutate_payloads(payloads_initial, args.mpayload)
+
+    # If we're using POST/PUT/PATCH payloads, we also add an empty item
+    # so the the for loop can work for GET and other methods.
+    if payloads_mutated != [{}]:
+        payloads_mutated.append({})
+
     methods = args.method
     extensions = args.ext
     slashes = get_slash_values(args.slash)
-    headers_mutated = merge_headers(headers_initial, args.mheader)
-    headers_mutated = mutate_headers(**headers_mutated)
+
     # dictionary words
     words = get_words(args.word, args.wordlist)
 
-    banner = get_banner(args.BASE_URL, words, args, headers_mutated)
+    banner = get_banner(args.BASE_URL, words, args, headers_mutated, payloads_mutated)
 
     if args.output is not None:
         try:
@@ -736,74 +844,83 @@ def main():
         sess = get_session(auth, headers_initial, proxies)
 
     curr = 1
-    total = (
-        len(words)
-        * len(headers_mutated)
-        * len(args.method)
-        * (2 if args.slash == "both" else 1)
-        * len(extensions)
-    )
+    total = total_requests(words, headers_mutated, payloads_mutated, args)
     for headers in headers_mutated:
-        rbanner = get_mutation_round_header(headers)
-        print(rbanner)
+        hbanner = get_mutation_round_header_banner(headers)
+        print(hbanner)
         if args.output is not None:
-            append_output(fp, rbanner)
+            append_output(fp, hbanner)
         for method in methods:
-            for word in words:
-                for extension in extensions:
-                    for slash in slashes:
-                        target = args.BASE_URL + word + extension + slash
-                        for retry in range(args.retry):
-                            s = get_status_text(curr, total, method, target, retry + 1, args.retry)
-                            print_status(s)
-                            if not args.new:
-                                succ, conn = session_request(
-                                    sess,
-                                    target,
-                                    method,
-                                    cookies,
-                                    headers,
-                                    args.timeout,
-                                    args.follow,
-                                    not args.insecure,
+            padding = len(max(methods, key=len)) - len(method)
+            for payloads in payloads_mutated:
+                if len(payloads) and method not in ["POST", "PUT", "PATCH"]:
+                    continue
+                if not len(payloads) and method in ["POST", "PUT", "PATCH"] and payloads_mutated != [{}]:
+                    continue
+                if method in ["POST", "PUT", "PATCH"]:
+                    print("Payload for {m}: ".format(m=method) + "&".join([k + "=" + payloads[k] for k in payloads]))
+                else:
+                    print("Payload for {m}: None".format(m=method))
+                for word in words:
+                    for extension in extensions:
+                        for slash in slashes:
+                            target = args.BASE_URL + word + extension + slash
+                            for retry in range(args.retry):
+                                s = get_status_text(curr, total, method, target, retry + 1, args.retry)
+                                print_status(s)
+                                if not args.new:
+                                    succ, conn = session_request(
+                                        sess,
+                                        target,
+                                        method,
+                                        payloads,
+                                        cookies,
+                                        headers,
+                                        args.timeout,
+                                        args.follow,
+                                        not args.insecure,
+                                    )
+                                else:
+                                    succ, conn = request(
+                                        target,
+                                        method,
+                                        auth,
+                                        payloads,
+                                        cookies,
+                                        headers,
+                                        proxies,
+                                        args.timeout,
+                                        args.follow,
+                                        not args.insecure,
+                                    )
+                                clear_status(s)
+                                if succ:
+                                    break
+                            if not succ:
+                                print_err(
+                                    "[ERR]   [{m}]{p} {target}: {msg}".format(
+                                        m=method, target=target, msg=conn["err"], p=" "*padding
+                                    )
                                 )
                             else:
-                                succ, conn = request(
-                                    target,
-                                    method,
-                                    auth,
-                                    cookies,
-                                    headers,
-                                    proxies,
-                                    args.timeout,
-                                    args.follow,
-                                    not args.insecure,
-                                )
-                            clear_status(s)
-                            if succ:
-                                break
-                        if not succ:
-                            print_err(
-                                "[ERR] [{m}] {target}: {msg}".format(
-                                    m=method, target=target, msg=conn["err"]
-                                )
-                            )
-                        else:
-                            code = conn.status_code
-                            if check_code(code, args.code):
-                                succ_msg = "[{code}] [{m}] {target}".format(
-                                    code=code, m=method, target=target
-                                )
-                                print_succ(succ_msg)
-                                if args.output is not None:
-                                    append_output(fp, succ_msg)
-                        if args.delay > 0:
-                            print_wait_message(args.delay)
-                            time.sleep(args.delay)
-                        curr += 1
+                                code = conn.status_code
+                                if check_code(code, args.code):
+                                    succ_msg = "[FOUND] [{code}] [{m}]{p} {target}".format(
+                                        code=code, m=method, target=target, p=" "*padding
+                                    )
+                                    print_succ(succ_msg)
+                                    if args.output is not None:
+                                        append_output(fp, succ_msg)
+                                elif args.verbose:
+                                    print("[MISS]  [{c}] [{m}]{p} {t}".format(c=code, m=method, t=target, p=" "*padding))
+                            if args.delay > 0:
+                                print_wait_message(args.delay)
+                                time.sleep(args.delay)
+                            curr += 1
         print()
     # Close file descriptor
-    fp.close()
+    if args.output is not None:
+        fp.close()
 
 
 if __name__ == "__main__":
