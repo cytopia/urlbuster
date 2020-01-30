@@ -837,7 +837,7 @@ def main():
 
     if args.output is not None:
         try:
-            fp = open(args.output, "w")
+            fp = open(args.output, "w", buffering=1)
             append_output(fp, banner)
         except (IOError, OSError) as err:
             print("%s" % (err), file=sys.stderr)
