@@ -948,7 +948,7 @@ def main():
     print(end_msg)
     # Close file descriptor
     if args.output is not None:
-        append_output(end_msg)
+        append_output(fp, end_msg)
         fp.close()
 
 
