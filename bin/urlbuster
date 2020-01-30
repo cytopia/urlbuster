@@ -942,8 +942,13 @@ def main():
                                 time.sleep(args.delay)
                             curr += 1
         print()
+
+    now = datetime.now()
+    end_msg = "Finished: {time}".format(time=now.strftime("%Y-%m-%d %H:%M:%S"))
+    print(end_msg)
     # Close file descriptor
     if args.output is not None:
+        append_output(end_msg)
         fp.close()
 
 
