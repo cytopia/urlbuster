@@ -869,9 +869,10 @@ def main():
                 ):
                     continue
                 if method in ["POST", "PUT", "PATCH"]:
-                    print(payloads)
-                    payload_msg = "Payload for {m}: ".format(m=method)
-                    +"&".join([k + "=" + payloads[k] for k in payloads])
+                    payload_msg = "Payload for {m}: {p}".format(
+                        m=method,
+                        p="&".join([k + "=" + payloads[k] for k in payloads])
+                    )
                 else:
                     payload_msg = "Payload for {m}: None".format(m=method)
                 print(payload_msg)
