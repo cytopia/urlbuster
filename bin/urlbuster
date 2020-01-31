@@ -715,9 +715,9 @@ def get_banner(url, words, args, mheaders, mpayloads):
 
     auth = ""
     if args.auth_basic is not None:
-        auth = "\n            Basisc auth:      {auth}".format(auth=args.auth_basic)
+        auth = "\n            Basic auth:        {auth}".format(auth=args.auth_basic)
     elif args.auth_digest is not None:
-        auth = "\n            Digest auth:      {auth}".format(auth=args.auth_digest)
+        auth = "\n            Digest auth:       {auth}".format(auth=args.auth_digest)
 
     if args.ext[0] == "" and len(args.ext) == 1:
         ext_value = "empty extension"
@@ -738,7 +738,7 @@ def get_banner(url, words, args, mheaders, mpayloads):
       SETTINGS
             Base URL:          {url}
             Valid codes:       {codes}
-            Connection:        {conn}
+            HTTP Connection:   {conn}
             Redirects:         {redir}
             Payloads:          {payloads}{cookie}{proxy}{auth}
             Timeout:           {timeout}s
@@ -766,10 +766,10 @@ def get_banner(url, words, args, mheaders, mpayloads):
         timeout=args.timeout,
         retries=args.retry,
         delay=str(args.delay) + "s" if args.delay else "None",
-        cookie="\n" + " " * 12 + "Cookies:          " + "&".join(args.cookie)
+        cookie="\n" + " " * 12 + "Cookies:           " + "&".join(args.cookie)
         if args.cookie
         else "",
-        proxy="\n" + " " * 12 + "Proxy:            " + args.proxy if args.proxy else "",
+        proxy="\n" + " " * 12 + "Proxy:             " + args.proxy if args.proxy else "",
         auth=auth,
         num_header=len(mheaders),
         num_payloads=0 if mpayloads == [{}] else len(mpayloads),
