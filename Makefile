@@ -5,7 +5,7 @@ endif
 # -------------------------------------------------------------------------------------------------
 # Default configuration
 # -------------------------------------------------------------------------------------------------
-.PHONY: help lint pycodestyle pydocstyle black dist sdist bdist build checkbuild deploy autoformat clean
+.PHONY: help lint test _test pycodestyle pydocstyle black dist sdist bdist build checkbuild deploy autoformat clean
 
 
 VERSION = 2.7
@@ -50,10 +50,8 @@ black:
 # -------------------------------------------------------------------------------------------------
 
 test:
-	@$(MAKE) --no-print-directory _test FILE=check-errors-normal.sh
-	@$(MAKE) --no-print-directory _test FILE=check-errors-reverse.sh
-	@$(MAKE) --no-print-directory _test FILE=check-errors-template-normal.sh
-	@$(MAKE) --no-print-directory _test FILE=check-errors-template-reverse.sh
+	@$(MAKE) --no-print-directory _test FILE=default.sh
+	@$(MAKE) --no-print-directory _test FILE=follow.sh
 
 
 _test:
@@ -67,8 +65,7 @@ _test:
 		-w /data \
 		python:$(VERSION)-alpine \
 		sh -c "pip install -r requirements.txt \
-			&& apk add bash make \
-			&& make install \
+			&& apk add bash bind-tools \
 			&& tests/$(FILE)"
 
 

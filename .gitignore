@@ -2,3 +2,5 @@ urlbuster.egg-info/
 urlbuster.egg-info/
 build/
 dist/
+tests/output/*
+!.keepme

@@ -17,6 +17,7 @@
 
 [![Build Status](https://github.com/cytopia/urlbuster/workflows/linting/badge.svg)](https://github.com/cytopia/urlbuster/actions?workflow=linting)
 [![Build Status](https://github.com/cytopia/urlbuster/workflows/building/badge.svg)](https://github.com/cytopia/urlbuster/actions?workflow=building)
+[![Build Status](https://github.com/cytopia/urlbuster/workflows/testing/badge.svg)](https://github.com/cytopia/urlbuster/actions?workflow=testing)
 
 
 Powerful web directory fuzzer to locate existing and/or hidden files or directories.

@@ -1,6 +1,10 @@
 ---
 
-name: testing
+###
+### Lints all generic and json files in the whole git repository
+###
+
+name: building
 on:
   pull_request:
   push:
@@ -9,7 +13,7 @@ on:
     tags:
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: False
@@ -20,17 +24,17 @@ jobs:
           - '3.7'
           - '3.8'
         target:
-          - default
-          - follow
+          - build
+          - dist
 
-    name: "[${{ matrix.version}}] [test] ${{ matrix.target }} ]"
+    name: "[${{ matrix.version }}] [build] ${{ matrix.target }} ]"
     steps:
       - name: Checkout repository
         uses: actions/checkout@master
 
-      - name: Test
+      - name: Build
         run: |
-          make _test FILE=${target}.sh VERSION=${version}
+          make ${target} VERSION=${version}
         env:
           target: ${{ matrix.target }}
           version: ${{ matrix.version }}
