@@ -471,7 +471,7 @@ multiple useragents and multiple host header values.
         "--delay",
         metavar="sec",
         required=False,
-        default=None,
+        default=0,
         type=_args_check_delay,
         help="Delay between requests to not flood the server.",
     )

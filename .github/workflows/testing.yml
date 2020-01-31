@@ -23,7 +23,7 @@ jobs:
           - default
           - follow
 
-    name: "[${{ matrix.version}}] [test] ${{ matrix.target }} ]"
+    name: "[${{ matrix.version}}] ${{ matrix.target }}"
     steps:
       - name: Checkout repository
         uses: actions/checkout@master

@@ -27,7 +27,7 @@ jobs:
           - build
           - dist
 
-    name: "[${{ matrix.version }}] [build] ${{ matrix.target }} ]"
+    name: "[${{ matrix.version }}] ${{ matrix.target }}"
     steps:
       - name: Checkout repository
         uses: actions/checkout@master
