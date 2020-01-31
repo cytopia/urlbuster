@@ -17,6 +17,7 @@
 
 [![Build Status](https://github.com/cytopia/urlbuster/workflows/linting/badge.svg)](https://github.com/cytopia/urlbuster/actions?workflow=linting)
 [![Build Status](https://github.com/cytopia/urlbuster/workflows/building/badge.svg)](https://github.com/cytopia/urlbuster/actions?workflow=building)
+[![Build Status](https://github.com/cytopia/urlbuster/workflows/testing/badge.svg)](https://github.com/cytopia/urlbuster/actions?workflow=testing)
 
 
 Powerful web directory fuzzer to locate existing and/or hidden files or directories.
@@ -31,13 +32,15 @@ with a lot of mutation options.
 * Cookie support
 * Basic Auth
 * Digest Auth
+* Retries (for slow servers)
+* Persistent and non-persistent HTTP connection
 * Request methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
 * Custom HTTP header
-* Persistent and non-persistent HTTP connection
+* Mutate POST, PUT and PATCH payloads
 * Mutate with different request methods
-* Mutate with different HTTP header
+* Mutate with different HTTP headers
 * Mutate with different file extensions
-* Mutate with trailing slashes
+* Mutate with and without trailing slashes
 * Enumerate GET parameter values
 
 
@@ -50,7 +53,7 @@ pip install urlbuster
 ## Usage
 ```
 usage: urlbuster [options] -w <str>/-W <file> BASE_URL
-       urlbuster -v, --help
+       urlbuster -V, --help
        urlbuster -h, --version
 
 URL bruteforcer to locate existing and/or hidden files or directories.
@@ -74,9 +77,15 @@ optional global arguments:
                         it has received from a previous request.
   -f, --follow          Follow redirects.
   -k, --insecure        Do not verify TLS certificates.
+  -v, --verbose         Show also missed URLs.
   --code str [str ...]  HTTP status code to treat as success.
                         You can use a '.' (dot) as a wildcard.
                         Default: 2.. 3.. 403 407 411 426 429 500 505 511
+  --payload p [p ...]   POST, PUT and PATCH payloads for all requests.
+                        Note, multiple values are allowed for multiple payloads.
+                        Note, if duplicates are specified, the last one will overwrite.
+                        See --mpayload for mutations.
+                        Format: <key>=<val> [<key>=<val>]
   --header h [h ...]    Custom http header string to add to all requests.
                         Note, multiple values are allowed for multiple headers.
                         Note, if duplicates are specified, the last one will overwrite.
@@ -110,6 +119,9 @@ optional mutating arguments:
                         Note, each supplied method will double the number of requests.
                         Supported methods: GET POST PUT DELETE PATCH HEAD OPTIONS
                         Default: GET
+  --mpayload p [p ...]  POST, PUT and PATCH payloads to mutate all requests..
+                        Note, multiple values are allowed for multiple payloads.
+                        Format: <key>=<val> [<key>=<val>]
   --mheader h [h ...]   Custom http header string to add to mutate all requests.
                         Note, multiple values are allowed for multiple headers.
                         Format: <key>:<val> [<key>:<val>]
@@ -124,7 +136,7 @@ optional mutating arguments:
 
 misc arguments:
   -h, --help            Show this help message and exit
-  -v, --version         Show version information
+  -V, --version         Show version information
 
 examples
 
@@ -134,9 +146,7 @@ examples
 ```
 
 
-## Examples
-
-### Different useragents
+## Mutation example
 
 Some websites behave differently for the same path depending on the specified useragent.
 
@@ -156,22 +166,25 @@ $ urlbuster \
    ╚██████╔╝██║  ██║███████╗██████╔╝╚██████╔╝███████║   ██║   ███████╗██║  ██║
     ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
 
-                               0.4.1 by cytopia
+                               0.5.0 by cytopia
 
       SETTINGS
-            Base URL:         http://www.domain.tld/
-            Connection:       Persistent
-            Valid codes:      2.., 3.., 403, 407, 411, 426, 429, 500, 505, 511
-            Timeout:          5.0s
-            Retries:          3
-            Delay:            None
+            Base URL:          https://www.everythingcli.org/
+            Valid codes:       2.., 3.., 403, 407, 411, 426, 429, 500, 505, 511
+            Connection:        Non-persistent
+            Redirects:         Don't follow
+            Payloads:          None
+            Timeout:           5.0s
+            Retries:           3
+            Delay:             None
 
       MUTATIONS
-            Mutating headers: 2
-            Methods:          5 (POST, GET, DELETE, PUT, PATCH)
-            Slashes:          no
-            Extensions:       1 (empty extension)
-            Words:            4614
+            Mutating headers:  2
+            Mutating payloads: 0 (POST)
+            Methods:           5 (POST, GET, DELETE, PUT, PATCH)
+            Slashes:           no
+            Extensions:        1 (empty extension)
+            Words:             4614
 
       TOTAL REQUESTS: 46140
       START TIME:     2020-01-29 08:52:12
@@ -183,7 +196,7 @@ Accept-Encoding: gzip, deflate
 Accept:          */*
 User-Agent:      python-requests/2.22.0
 
-[200] [GET]      http://domain.tld/robots.txt
+[301] [GET]      http://domain.tld/robots.txt
 
 --------------------------------------------------------------------------------
 Connection:      keep-alive
@@ -197,6 +210,145 @@ User-Agent:      Googlebot/2.1 (+http://www.googlebot.com/bot.html)
 [301] [DELETE]   http://domain.tld/robots.txt
 [301] [PUT]      http://domain.tld/robots.txt
 [301] [PATCH]    http://domain.tld/robots.txt
+```
+
+
+## Examples
+
+### Default usage
+
+#### Basic
+```bash
+$ urlbuster \
+  -W /path/to/wordlist.txt \
+  http://www.domain.tld/
+```
+#### Proxy through Burpsuite
+```bash
+$ urlbuster \
+  -W /path/to/wordlist.txt \
+  --proxy 'http://localhost:8080' \
+  http://www.domain.tld/
+```
+#### Save results to file
+```bash
+$ urlbuster \
+  -W /path/to/wordlist.txt \
+  --output out.txt \
+  http://www.domain.tld/
+```
+#### Scan behind Basic Auth
+```bash
+$ urlbuster \
+  -W /path/to/wordlist.txt \
+  --auth-basic 'user:pass' \
+  http://www.domain.tld/
+```
+#### Use session cookie
+```bash
+$ urlbuster \
+  -W /path/to/wordlist.txt \
+  --cookie 'PHPSESSID=a79b00e7-035a-2bb4-352a-439d855feabf' \
+  http://www.domain.tld/
+```
+
+
+### Find files
+
+#### Find files in root directory
+```bash
+$ urlbuster \
+  -W /path/to/wordlist.txt \
+  --code 200 301 302 \
+  --ext .zip .tar .tar.gz .gz .rar \
+  http://www.domain.tld/
+```
+#### Find files in sub directory
+```bash
+$ urlbuster \
+  -W /path/to/wordlist.txt \
+  --code 200 301 302 \
+  --ext .zip .tar .tar.gz .gz .rar \
+  http://www.domain.tld/wp-content/
+```
+
+
+### Advanced usage
+
+#### Bruteforce query parameter
+```bash
+$ urlbuster \
+  -W /path/to/wordlist.txt \
+  --method GET \
+  --code 200 301 302 \
+  http://www.domain.tld/search?q=
+```
+#### Bruteforce POST requests
+```bash
+$ urlbuster \
+  -W /path/to/wordlist.txt \
+  --code 200 301 302 \
+  --method POST \
+  --payload \
+    'user=somename' \
+    'pass=somepass' \
+    'mail=some@mail.tld' \
+    'submit=yes' \
+  http://www.domain.tld/
+```
+#### Bruteforce mutated POST requests
+```bash
+$ urlbuster \
+  -w index.php \
+  --code 200 301 302 \
+  --method POST \
+  --mpayload \
+    'user=somename1' \
+    'user=somename2' \
+    'user=somename3' \
+    'pass=somepass1' \
+    'pass=somepass2' \
+    'pass=somepass3' \
+    'mail=some@mail1.tld' \
+    'mail=some@mail2.tld' \
+    'mail=some@mail3.tld' \
+    'submit=yes' \
+  http://www.domain.tld/wp-admin/
+```
+#### Useragent SQL injections
+```bash
+$ urlbuster \
+  -W /path/to/wordlist.txt \
+  --code 5.. \
+  --method GET POST \
+  --mheader \
+    "User-Agent: ;" \
+    "User-Agent: ' or \"" \
+    "User-Agent: -- or #" \
+    "User-Agent: ' OR '1" \
+    "User-Agent: ' OR 1 -- -" \
+    "User-Agent: \" OR 1 = 1 -- -" \
+    "User-Agent: '='" \
+    "User-Agent: 'LIKE'" \
+    "User-Agent: '=0--+" \
+    "User-Agent:  OR 1=1" \
+    "User-Agent: ' OR 'x'='x" \
+    "User-Agent: ' AND id IS NULL; --" \
+  http://www.domain.tld/
+```
+#### Find potential vhosts
+```bash
+$ urlbuster \
+  -w / \
+  --method GET POST \
+  --mheader \
+    "Host: internal1.lan" \
+    "Host: internal2.lan" \
+    "Host: internal3.lan" \
+    "Host: internal4.lan" \
+    "Host: internal5.lan" \
+    "Host: internal6.lan" \
+  http://10.0.0.1
 ```
 
 
