@@ -26,7 +26,13 @@ Similar to [dirb](http://dirb.sourceforge.net/) or [gobuster](https://github.com
 with a lot of mutation options.
 
 
-## Features
+## :tada: Installation
+```bash
+pip install urlbuster
+```
+
+
+## :star: Features
 
 * Proxy support
 * Cookie support
@@ -44,13 +50,7 @@ with a lot of mutation options.
 * Enumerate GET parameter values
 
 
-## Installation
-```bash
-pip install urlbuster
-```
-
-
-## Usage
+## :computer: Usage
 ```
 usage: urlbuster [options] -w <str>/-W <file> BASE_URL
        urlbuster -V, --help
@@ -146,7 +146,7 @@ examples
 ```
 
 
-## Mutation example
+## :bulb: Mutation example
 
 Some websites behave differently for the same path depending on the specified useragent.
 
@@ -213,7 +213,7 @@ User-Agent:      Googlebot/2.1 (+http://www.googlebot.com/bot.html)
 ```
 
 
-## Examples
+## :bulb: Examples
 
 ### Default usage
 
@@ -352,12 +352,36 @@ $ urlbuster \
 ```
 
 
-## Disclaimer
+## :lock: [cytopia](https://github.com/cytopia) sec tools
+
+Below is a list of other sec tools I am maintaining.
+
+| Tool                 | Category             | Language   | Description |
+|----------------------|----------------------|------------|-------------|
+| **[smtp-user-enum]** | Enumeration          | Python 2+3 | SMTP users enumerator |
+| **[urlbuster]**      | Enumeration          | Python 2+3 | Mutable web directory fuzzer |
+| **[netcat]**         | Pivoting             | Python 2+3 | Cross-platform netcat |
+| **[badchars]**       | Reverse Engineering  | Python 2+3 | Badchar generator |
+| **[fuzza]**          | Reverse Engineering  | Python 2+3 | TCP fuzzing tool |
+
+[netcat]: https://github.com/cytopia/netcat
+[smtp-user-enum]: https://github.com/cytopia/smtp-user-enum
+[urlbuster]: https://github.com/cytopia/urlbuster
+[badchars]: https://github.com/cytopia/badchars
+[fuzza]: https://github.com/cytopia/fuzza
+
+
+## :octocat: Contributing
+
+See **[Contributing guidelines](CONTRIBUTING.md)** to help to improve this project.
+
+
+## :exclamation: Disclaimer
 
 This tool may be used for legal purposes only. Users take full responsibility for any actions performed using this tool. The author accepts no liability for damage caused by this tool. If these terms are not acceptable to you, then do not use this tool.
 
 
-## License
+## :page_facing_up: License
 
 **[MIT License](LICENSE.txt)**
 
