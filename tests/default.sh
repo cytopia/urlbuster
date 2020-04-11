@@ -25,7 +25,10 @@ URL="https://www.google.com/search?q="
 ###
 ### Default
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}"
+echo "# ------------------------------------------------------------------------------"
+echo "# Default"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}'"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -52,7 +55,10 @@ check_error "${OUT}"
 ###
 ### Default + Codes
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --code 200 301 302
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Codes"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --code 200 301 302"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "200, 301, 302" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -79,7 +85,10 @@ check_error "${OUT}"
 ###
 ### Default + HTTP Connection
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --new
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + HTTP Connection"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --new"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "Non-persistent" "1"
@@ -106,7 +115,10 @@ check_error "${OUT}"
 ###
 ### Default + Redirects: follow
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --follow
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Redirects: follow"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --follow"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -133,10 +145,13 @@ check_error "${OUT}"
 ###
 ### Default + Insecure
 ###
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Insecure"
+echo "# ------------------------------------------------------------------------------"
 HOST="www.google.com"
 ADDRESS="$( host  "${HOST}" | grep 'has address' | grep -Eo '[0-9][.0-9]+' )"
 URL_INS="https://${ADDRESS}/search?q="
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL_INS}" --insecure
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL_INS}' --insecure"
 check_setting "${OUT}" "Base URL" "${URL_INS}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -163,7 +178,10 @@ check_error "${OUT}"
 ###
 ### Default + Header: User-Agent
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --header 'User-Agent: Chrome'
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Header: User-Agent"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --header 'User-Agent: Chrome'"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -190,7 +208,10 @@ check_error "${OUT}"
 ###
 ### Default + Payloads
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --method GET POST --payload 'username=johndoe'
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Payloads"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --method GET POST --payload 'username=johndoe'"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -217,7 +238,10 @@ check_error "${OUT}"
 ###
 ### Default + Cookie
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --cookie somekey=someval
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Cookie"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --cookie somekey=someval"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -245,7 +269,10 @@ check_error "${OUT}"
 ###
 ### Default + Proxy
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --proxy 'http://localhost:8080'
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Proxy"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --proxy 'http://localhost:8080'"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -273,7 +300,10 @@ check_error "${OUT}" "1"
 ###
 ### Default + Auth basic
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --auth-basic 'username:password'
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Auth basic"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --auth-basic 'username:password'"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -301,7 +331,10 @@ check_error "${OUT}"
 ###
 ### Default + Auth digest
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --auth-digest 'username:password'
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Auth digest"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --auth-digest 'username:password'"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -329,7 +362,10 @@ check_error "${OUT}"
 ###
 ### Default + Timeout
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --timeout 30
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Timeout"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --timeout 30"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -356,7 +392,10 @@ check_error "${OUT}"
 ###
 ### Default + Retries
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --retry 10
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Retries"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --retry 10"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -383,7 +422,10 @@ check_error "${OUT}"
 ###
 ### Default + Delay
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --delay 1
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Delay"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --delay 1"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -419,7 +461,10 @@ check_error "${OUT}"
 ###
 ### Default + Slashes == yes
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --slash yes
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Slashes == yes"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --slash yes"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -446,7 +491,10 @@ check_error "${OUT}"
 ###
 ### Default + Slashes == both
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --slash both
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Slashes == both"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --slash both"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -473,7 +521,10 @@ check_error "${OUT}"
 ###
 ### Default + Extensions
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL}" --ext .zip .tar
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Extensions"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL}' --ext .zip .tar"
 check_setting "${OUT}" "Base URL" "${URL}" "1"
 check_setting "${OUT}" "Valid codes" "${DEFAULT_CODES}" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
