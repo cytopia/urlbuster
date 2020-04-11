@@ -13,7 +13,7 @@ setup(
     author="cytopia",
     author_email="cytopia@everythingcli.org",
     url="https://github.com/cytopia/urlbuster",
-    install_requires=["future", "requests"],
+    install_requires=["requests"],
     scripts=[
         "bin/urlbuster"
     ],
