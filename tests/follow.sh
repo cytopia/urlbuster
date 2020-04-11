@@ -26,7 +26,10 @@ URL_FOLLOW="https://google.com/search?q="
 ###
 ### Default + Redirects: nofollow
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL_FOLLOW}" --code 301 302
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Redirects: nofollow"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL_FOLLOW}' --code 301 302"
 check_setting "${OUT}" "Base URL" "${URL_FOLLOW}" "1"
 check_setting "${OUT}" "Valid codes" "301, 302" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
@@ -53,7 +56,10 @@ check_error "${OUT}"
 ###
 ### Default + Redirects: follow
 ###
-"${BINARY}" -W "${WORD}" --output "${OUT}" "${URL_FOLLOW}" --follow --code 200
+echo "# ------------------------------------------------------------------------------"
+echo "# Default + Redirects: follow"
+echo "# ------------------------------------------------------------------------------"
+run "'${BINARY}' -W '${WORD}' --output '${OUT}' '${URL_FOLLOW}' --follow --code 200"
 check_setting "${OUT}" "Base URL" "${URL_FOLLOW}" "1"
 check_setting "${OUT}" "Valid codes" "200" "1"
 check_setting "${OUT}" "HTTP Connection" "${DEFAULT_CONN}" "1"
