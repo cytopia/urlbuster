@@ -51,7 +51,7 @@ function run() {
 		printf "${yellow}[%s] ${red}%s \$ ${green}${cmd}${reset}\\n" "$(hostname)" "$(whoami)" >&2
 	fi
 
-	if sh -c "${cmd}"; then
+	if eval "${cmd}"; then
 		if [ "${to_stderr}" -eq "0" ]; then
 			printf "${green}[%s]${reset}\\n" "OK"
 		else
@@ -90,7 +90,7 @@ function run_fail() {
 		printf "${yellow}[%s] ${red}%s \$ ${yellow}[NOT] ${green}${cmd}${reset}\\n" "$(hostname)" "$(whoami)" >&2
 	fi
 
-	if ! sh -c "${cmd}"; then
+	if ! eval "${cmd}"; then
 		if [ "${to_stderr}" -eq "0" ]; then
 			printf "${green}[%s]${reset}\\n" "OK"
 		else
