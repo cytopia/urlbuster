@@ -314,8 +314,8 @@ def get_args():
         formatter_class=argparse.RawTextHelpFormatter,
         add_help=False,
         usage="""%(prog)s [options] -w <str>/-W <file> BASE_URL
-       %(prog)s -V, --help
-       %(prog)s -h, --version
+       %(prog)s -V, --version
+       %(prog)s -h, --help
 """,
         description="""URL bruteforcer to locate existing and/or hidden files or directories.
 
